@@ -332,7 +332,7 @@ const ProjectsList: React.FC = () => {
                   key={project.name}
                   isClickable
                   onRowClick={(event) => {
-                    if (isRowActionClick(event)) {
+                    if (event && isRowActionClick(event)) {
                       return;
                     }
                     navigate(`/projects/${project.name}/overview`);
