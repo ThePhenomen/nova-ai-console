@@ -21,7 +21,8 @@
   "devDependencies": {
     "@nova-ai/eslint-config": "*",
     "@nova-ai/jest-config": "*",
-    "@nova-ai/tsconfig": "*"
+    "@nova-ai/tsconfig": "*",
+    "@types/lodash-es": "^4.17.12"
   },
   "peerDependencies": {
     "@patternfly/react-core": "^6",

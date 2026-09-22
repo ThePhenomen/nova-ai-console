@@ -112,7 +112,7 @@ export class PluginStore implements PluginStoreInterface {
 
     this.featureFlags = {
       ...this.featureFlags,
-      ...pickBy(newFlags, (value) => typeof value === 'boolean'),
+      ...pickBy(newFlags, (value: boolean) => typeof value === 'boolean'),
     };
 
     if (!isEqual(prevFeatureFlags, this.featureFlags)) {

@@ -29,6 +29,8 @@
   "devDependencies": {
     "@nova-ai/eslint-config": "*",
     "@nova-ai/tsconfig": "*",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
     "@swc/core": "^1.15.40",
     "css-loader": "^5.2.7",
     "file-loader": "^6.2.0",

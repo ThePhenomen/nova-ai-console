@@ -53,9 +53,10 @@ export const resolveCodeRefValues = async <TExtension extends Extension>(
     onResolutionErrors(resolutionErrors);
   }
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+  // Code refs are replaced in-place on a cloned properties object; the result is a
+  // ResolvedExtension even though TypeScript cannot prove that from the mutation.
   return {
     ...extension,
     properties: clonedProperties,
-  } as LoadedExtension<ResolvedExtension<TExtension>>;
+  } as unknown as LoadedExtension<ResolvedExtension<TExtension>>;
 };
