@@ -1,1 +1,1 @@
-module.exports = require('@odh-dashboard/eslint-config').recommendedReactTypescript(__dirname);
+module.exports = require('@nova-ai/eslint-config').recommendedReactTypescript(__dirname);

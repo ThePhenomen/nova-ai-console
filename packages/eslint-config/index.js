@@ -19,7 +19,7 @@ const addNoExtraneousDependenciesRule = (config, dirname) => {
     'import/no-extraneous-dependencies': [
       'error',
       {
-        packageDir: [dirname, path.resolve(__dirname, '../../frontend')],
+        packageDir: [dirname, path.resolve(__dirname, '../..')],
       },
     ],
   };
@@ -43,12 +43,11 @@ const recommended = {
       {
         root: true,
         extends: [
-          '@odh-dashboard/eslint-config/base',
-          '@odh-dashboard/eslint-config/node',
-          '@odh-dashboard/eslint-config/package-restrictions',
-          '@odh-dashboard/eslint-config/markdown',
-          // '@odh-dashboard/eslint-config/yaml',
-          '@odh-dashboard/eslint-config/prettier',
+          '@nova-ai/eslint-config/base',
+          '@nova-ai/eslint-config/node',
+          '@nova-ai/eslint-config/markdown',
+          // '@nova-ai/eslint-config/yaml',
+          '@nova-ai/eslint-config/prettier',
         ],
       },
       dirname,
@@ -58,13 +57,12 @@ const recommended = {
       {
         root: true,
         extends: [
-          '@odh-dashboard/eslint-config/base',
-          '@odh-dashboard/eslint-config/node',
-          '@odh-dashboard/eslint-config/package-restrictions',
-          '@odh-dashboard/eslint-config/typescript',
-          '@odh-dashboard/eslint-config/markdown',
-          // '@odh-dashboard/eslint-config/yaml',
-          '@odh-dashboard/eslint-config/prettier',
+          '@nova-ai/eslint-config/base',
+          '@nova-ai/eslint-config/node',
+          '@nova-ai/eslint-config/typescript',
+          '@nova-ai/eslint-config/markdown',
+          // '@nova-ai/eslint-config/yaml',
+          '@nova-ai/eslint-config/prettier',
         ],
       },
       dirname,
@@ -74,14 +72,13 @@ const recommended = {
       {
         root: true,
         extends: [
-          '@odh-dashboard/eslint-config/base',
-          '@odh-dashboard/eslint-config/node',
-          '@odh-dashboard/eslint-config/react',
-          '@odh-dashboard/eslint-config/package-restrictions',
-          '@odh-dashboard/eslint-config/typescript',
-          '@odh-dashboard/eslint-config/markdown',
-          // '@odh-dashboard/eslint-config/yaml',
-          '@odh-dashboard/eslint-config/prettier',
+          '@nova-ai/eslint-config/base',
+          '@nova-ai/eslint-config/node',
+          '@nova-ai/eslint-config/react',
+          '@nova-ai/eslint-config/typescript',
+          '@nova-ai/eslint-config/markdown',
+          // '@nova-ai/eslint-config/yaml',
+          '@nova-ai/eslint-config/prettier',
         ],
       },
       dirname,

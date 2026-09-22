@@ -1,4 +1,4 @@
-import type { AnyObject } from '@openshift/dynamic-plugin-sdk';
+import type { AnyObject } from '../sdk-types';
 import { forOwn, isPlainObject } from 'lodash-es';
 
 /**

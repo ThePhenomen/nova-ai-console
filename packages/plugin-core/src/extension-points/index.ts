@@ -1,22 +1,7 @@
-// Common — consumed by both RHOAI dashboard and RHAII distributions
-export * from './areas';
 export * from './navigation';
 export * from './routes';
-export * from './status-provider';
-export * from './project-details';
-export * from './overview-card';
 export * from './tab-route';
-export * from './tasks';
-
-// RHAII app-shell — consumed by distributions/base only (convergence with RHOAI is a future goal)
 export * from './masthead';
-
-// Generic extension points — each file defines properties + extension type + guard
-export * from './detail-tabs';
-export * from './actions';
-export * from './detail-cards';
-export * from './table-columns';
-export * from './connection-types';
 
 // Utilities
 export * from './utils';
@@ -42,15 +27,3 @@ export * from './utils';
  * **Example:**
  * `app.table/column` - Represents an extension point for adding columns to tables within the 'app' namespace.
  */
-
-// eg. Extension point:
-// export type TabExtension = Extension<
-//   'app.tab',
-//   {
-//     title: string;
-//     content: ComponentCodeRef<TabProps}>;
-//   }
-// >;
-//
-// export const isTabExtension = (extension: Extension): extension is TabExtension =>
-//   extension.type === 'app.tab';

@@ -1,1 +1,6 @@
-export { useExtensions } from '@openshift/dynamic-plugin-sdk';
+export {
+  useExtensions,
+  usePluginStore,
+  useFeatureFlag,
+  PluginStoreProvider,
+} from './PluginStoreContext';

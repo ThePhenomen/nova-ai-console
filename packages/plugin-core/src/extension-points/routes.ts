@@ -1,4 +1,4 @@
-import type { Extension } from '@openshift/dynamic-plugin-sdk';
+import type { Extension } from '../core/sdk-types';
 import type { ComponentCodeRef } from '../core/types';
 
 /**

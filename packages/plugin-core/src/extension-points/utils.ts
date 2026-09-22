@@ -1,4 +1,4 @@
-import type { Extension, ExtensionPredicate } from '@openshift/dynamic-plugin-sdk';
+import type { Extension, ExtensionPredicate } from '../core/sdk-types';
 
 const SAFE_PATH_SEGMENT = /^[A-Za-z0-9_-]+$/;
 

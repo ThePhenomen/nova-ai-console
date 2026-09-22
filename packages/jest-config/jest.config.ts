@@ -27,7 +27,7 @@ export default {
 
   // include projects from node_modules as required
   transformIgnorePatterns: [
-    'node_modules/(?!yaml|@openshift|lodash-es|uuid|@patternfly|d3|delaunator|robust-predicates|internmap|monaco-editor)',
+    'node_modules/(?!yaml|lodash-es|uuid|@patternfly|d3|delaunator|robust-predicates|internmap|monaco-editor)',
   ],
 
   setupFilesAfterEnv: [require.resolve('./config/jest.setup.ts')],

@@ -1,7 +1,7 @@
 {
   "private": true,
-  "name": "@odh-dashboard/jest-config",
-  "description": "ODH Dashboard Jest configs.",
+  "name": "@nova-ai/jest-config",
+  "description": "Nova AI Console Jest configs.",
   "version": "0.0.0",
   "types": "types.d.ts",
   "exports": {
@@ -32,8 +32,8 @@
     "jest-environment-jsdom": "^29.7.0"
   },
   "devDependencies": {
-    "@odh-dashboard/eslint-config": "*",
-    "@odh-dashboard/tsconfig": "*"
+    "@nova-ai/eslint-config": "*",
+    "@nova-ai/tsconfig": "*"
   },
   "peerDependencies": {
     "react": "^18",

@@ -1,5 +1,5 @@
 {
-  "extends": "@odh-dashboard/tsconfig/tsconfig.json",
+  "extends": "@nova-ai/tsconfig/tsconfig.json",
   "include": [
     "./**/*.ts",
     "./**/*.tsx",
@@ -7,8 +7,6 @@
     "./**/*.jsx"
   ],
   "exclude": [
-    "node_modules",
-    "../../frontend/**/*",
-    "../../backend/**/*"
+    "node_modules"
   ]
 }

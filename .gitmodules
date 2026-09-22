@@ -1,3 +1,0 @@
-[submodule "packages/lm-eval/upstream"]
-	path = packages/lm-eval/upstream
-	url = https://github.com/trustyai-explainability/trustyai-dashboard.git 

@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Content,
   Masthead,
   MastheadBrand,
   MastheadContent,
@@ -15,18 +16,15 @@ import {
 } from '@patternfly/react-core';
 import { MoonIcon, SunIcon } from '@patternfly/react-icons';
 import { Link } from 'react-router-dom';
-import { LazyCodeRefComponent, useExtensions } from '@odh-dashboard/plugin-core';
+import { LazyCodeRefComponent, useExtensions } from '@nova-ai/plugin-core';
 import {
   isMastheadBrandExtension,
   isMastheadToolbarItemExtension,
-} from '@odh-dashboard/plugin-core/extension-points';
+} from '@nova-ai/plugin-core/extension-points';
 import { useThemeContext } from './ThemeContext';
-import logoLight from './images/red-hat-ai-light.svg';
-import logoDark from './images/red-hat-ai-dark.svg';
 
 const ShellBrand: React.FC = () => {
   const brandExtensions = useExtensions(isMastheadBrandExtension);
-  const { theme } = useThemeContext();
 
   if (brandExtensions.length > 0) {
     const { logoComponent, href = '/' } = brandExtensions[0].properties;
@@ -39,16 +37,12 @@ const ShellBrand: React.FC = () => {
     );
   }
 
-  const logo = theme === 'dark' ? logoDark : logoLight;
-
   return (
     <MastheadBrand data-codemods>
-      <Link to="/" style={{ display: 'inline-flex' }}>
-        <img
-          src={`data:image/svg+xml,${encodeURIComponent(logo)}`}
-          alt="Red Hat AI (placeholder)"
-          style={{ height: '36px', width: 'auto' }}
-        />
+      <Link to="/" style={{ display: 'inline-flex', textDecoration: 'none' }}>
+        <Content component="h1" style={{ fontSize: '1.25rem', margin: 0 }}>
+          Nova AI
+        </Content>
       </Link>
     </MastheadBrand>
   );

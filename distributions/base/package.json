@@ -1,7 +1,7 @@
 {
-  "name": "@odh-dashboard/base-distribution",
+  "name": "@nova-ai/shell",
   "version": "0.0.0",
-  "description": "Base app shell distribution framework",
+  "description": "Base app shell framework for Nova AI distributions",
   "license": "Apache-2.0",
   "private": true,
   "main": "./src/lib.ts",
@@ -13,15 +13,14 @@
   },
   "scripts": {
     "dev": "npm run start:dev",
-    "start:dev": "concurrently -k -n bff,shell \"make -C ../core-bff dev-bff\" \"webpack serve --hot --color --config ./config/webpack.dev.js\"",
+    "start:dev": "webpack serve --hot --color --config ./config/webpack.dev.js",
     "build": "webpack --config ./config/webpack.prod.js",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@odh-dashboard/plugin-core": "*",
-    "@openshift/dynamic-plugin-sdk": "^5.0.1",
+    "@nova-ai/plugin-core": "*",
     "@patternfly/patternfly": "6.4.0",
     "@patternfly/react-core": "6.4.1",
     "@patternfly/react-icons": "6.4.0",
@@ -31,8 +30,8 @@
     "react-router-dom": "^7.17.0"
   },
   "devDependencies": {
-    "@odh-dashboard/eslint-config": "*",
-    "@odh-dashboard/tsconfig": "*",
+    "@nova-ai/eslint-config": "*",
+    "@nova-ai/tsconfig": "*",
     "@swc/core": "^1.15.40",
     "css-loader": "^5.2.7",
     "file-loader": "^6.2.0",

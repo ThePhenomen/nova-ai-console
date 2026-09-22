@@ -4,17 +4,6 @@ const { merge } = require('./utils');
 const typescriptBaseNoRestrictedSyntax = [
   {
     selector:
-      'Literal[value=/\\bRed Hat OpenShift AI\\b/i],JSXText[value=/\\bRed Hat OpenShift AI\\b/i]',
-    message:
-      'Do not hard code product name `Red Hat OpenShift AI`. Use `~/utilities/const#ODH_PRODUCT_NAME` instead.',
-  },
-  {
-    selector: 'Literal[value=/\\bOpen Data Hub\\b/i],JSXText[value=/\\bOpen Data Hub\\b/i]',
-    message:
-      'Do not hard code product name `Open Data Hub`. Use `~/utilities/const#ODH_PRODUCT_NAME` instead.',
-  },
-  {
-    selector:
       'JSXElement[openingElement.name.name=/Modal/]:has(> JSXOpeningElement:has(> [name.name=/(isOpen|open)/][value]))',
     message:
       "Do not control modals visibility with 'isOpen|open', use conditional rendering instead.",
@@ -137,8 +126,7 @@ module.exports = {
           'error',
           ...typescriptBaseNoRestrictedSyntax,
           {
-            selector:
-              "ImportDeclaration[importKind!='type'][source.value!='@odh-dashboard/plugin-core/areas']",
+            selector: "ImportDeclaration[importKind!='type']",
             message:
               "Must use 'import type' when importing. Use dynamic imports for code references (eg. `() => import('#~/Test')`).",
           },

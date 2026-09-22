@@ -3,7 +3,7 @@ import type {
   Extension,
   LoadedExtension,
   ResolvedExtension,
-} from '@openshift/dynamic-plugin-sdk';
+} from '../sdk-types';
 import { cloneDeep } from 'lodash-es';
 import { visitDeep } from './objects';
 

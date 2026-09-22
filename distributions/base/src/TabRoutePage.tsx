@@ -1,13 +1,13 @@
 import React from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Content, PageSection, Spinner, Tab, Tabs, TabTitleText } from '@patternfly/react-core';
-import type { LoadedExtension } from '@openshift/dynamic-plugin-sdk';
+import type { LoadedExtension } from '@nova-ai/plugin-core';
 import {
   isTabRouteTabExtension,
   type TabRoutePageExtension,
   type TabRouteTabExtension,
-} from '@odh-dashboard/plugin-core/extension-points';
-import { LazyCodeRefComponent, useExtensions } from '@odh-dashboard/plugin-core';
+} from '@nova-ai/plugin-core/extension-points';
+import { LazyCodeRefComponent, useExtensions } from '@nova-ai/plugin-core';
 import NotFound from './NotFound';
 import { ErrorBoundary } from './ErrorBoundary';
 

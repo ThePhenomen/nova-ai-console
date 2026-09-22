@@ -8,7 +8,7 @@ import {
   PageSidebar,
   PageSidebarBody,
 } from '@patternfly/react-core';
-import { useExtensions } from '@odh-dashboard/plugin-core';
+import { useExtensions } from '@nova-ai/plugin-core';
 import {
   isNavExtension,
   isHrefNavItemExtension,
@@ -21,11 +21,9 @@ import {
   type NavItemProperties,
   type TabRoutePageExtension,
   type TabRouteTabExtension,
-} from '@odh-dashboard/plugin-core/extension-points';
-import type { Extension, LoadedExtension } from '@openshift/dynamic-plugin-sdk';
+} from '@nova-ai/plugin-core/extension-points';
+import type { Extension, LoadedExtension } from '@nova-ai/plugin-core';
 
-// TODO: Dedup — compareNavItemGroups and getTopLevelExtensions are copied from
-// frontend/src/app/navigation/utils.ts. Move to plugin-core when consolidating.
 const DEFAULT_GROUP = '5_default';
 
 type AnyNavExtension = NavExtension | TabRoutePageExtension;

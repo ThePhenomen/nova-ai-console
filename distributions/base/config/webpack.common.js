@@ -5,7 +5,6 @@ const BASE_DIR = path.resolve(__dirname, '..');
 const BASE_SRC_DIR = path.resolve(BASE_DIR, 'src');
 const REPO_ROOT = path.resolve(BASE_DIR, '../..');
 const PLUGIN_CORE_DIR = path.resolve(REPO_ROOT, 'packages/plugin-core/src');
-const INTERNAL_DIR = path.resolve(REPO_ROOT, 'frontend/src');
 
 /**
  * Shared webpack configuration factory for all distributions.
@@ -40,13 +39,7 @@ module.exports = ({
         {
           test: /\.(tsx|ts|jsx|js)?$/,
           exclude: /node_modules/,
-          include: [
-            normalizedDistDir,
-            BASE_SRC_DIR,
-            PLUGIN_CORE_DIR,
-            INTERNAL_DIR,
-            ...normalizedIncludes,
-          ],
+          include: [normalizedDistDir, BASE_SRC_DIR, PLUGIN_CORE_DIR, ...normalizedIncludes],
           use: [{ loader: 'swc-loader' }],
         },
         {

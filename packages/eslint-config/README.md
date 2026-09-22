@@ -1,19 +1,18 @@
-# @odh-dashboard/eslint-config
+# @nova-ai/eslint-config
 
-Shared ESLint rules and configurations for all ODH Dashboard packages.
+Shared ESLint rules and configurations for all Nova AI Console packages.
 
 ## Purpose
 
-Centralises linting rules so every package in the monorepo enforces the same code-quality standards. Provides base, markdown, node, and package-restriction configs.
+Centralises linting rules so every package in the monorepo enforces the same
+code-quality standards. Provides base, React, TypeScript, markdown and node configs.
 
 ## Usage
 
-In your package `eslint.config.js`:
+In your package `.eslintrc.js`:
 
 ```js
-import base from '@odh-dashboard/eslint-config';
-
-export default [...base];
+module.exports = require('@nova-ai/eslint-config').recommendedReactTypescript(__dirname);
 ```
 
 ## Configs
@@ -23,6 +22,4 @@ export default [...base];
 | `base.js` | TypeScript + React rules (primary) |
 | `markdown.js` | Rules for `.md` code fences |
 | `node.js` | Node.js / CommonJS scripts |
-| `package-restrictions.js` | Import restriction rules |
 
-> For full documentation see [`docs/guidelines.md`](../../docs/guidelines.md).

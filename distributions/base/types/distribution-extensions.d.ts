@@ -1,4 +1,4 @@
-import type { Extension } from '@openshift/dynamic-plugin-sdk';
+import type { Extension } from '@nova-ai/plugin-core';
 
 declare const pluginExtensions: Record<string, Extension[]>;
 export default pluginExtensions;

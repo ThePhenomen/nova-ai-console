@@ -21,10 +21,7 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "outDir": "${configDir}/dist",
-    "emitDeclarationOnly": false,
-    "paths": {
-      "@mf/*": ["../../frontend/@mf-types/@mf/*"]
-    }
+    "emitDeclarationOnly": false
   },
   "include": [
     "${configDir}/**/*.ts",

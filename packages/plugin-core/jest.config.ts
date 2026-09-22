@@ -1,1 +1,1 @@
-export { default } from '@odh-dashboard/jest-config';
+export { default } from '@nova-ai/jest-config';

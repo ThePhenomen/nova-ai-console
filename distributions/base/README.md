@@ -1,26 +1,25 @@
 # Base Distribution
 
-Minimal app shell framework - renders a PatternFly page chrome (masthead, sidebar, error boundary) with no features loaded — distribution layers add functionality on top.
+Minimal app shell framework — renders a PatternFly page chrome (masthead, sidebar,
+routing, error boundary) with no features loaded. Distribution layers such as
+`distributions/nova-ai` add functionality on top by contributing extensions.
 
-## Running locally
-
-From the repo root:
+This package is not deployed on its own. To run the console, use the Nova AI
+distribution from the repo root:
 
 ```bash
-npm install
-npm run dev --prefix distributions/base
+npm run start:dev
 ```
 
-This starts:
+To run the bare shell (useful when working on the chrome itself):
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| BFF stub | `http://localhost:4000` | Minimal `/api/status` endpoint |
-| App shell | `http://localhost:4010` | Webpack dev server with HMR |
+```bash
+npm run start:dev --workspace @nova-ai/shell
+```
 
 ### Environment variables
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `BFF_PORT` | `4000` | Port for the stub BFF server |
-| `SHELL_PORT` | `4010` | Port for the webpack dev server |
+| Variable | Default   | Purpose                               |
+| -------- | --------- | ------------------------------------- |
+| `HOST`   | `0.0.0.0` | Interface the webpack dev server binds |
+| `PORT`   | `4010`    | Port for the webpack dev server        |

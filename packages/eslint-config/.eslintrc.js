@@ -1,1 +1,1 @@
-module.exports = require('@odh-dashboard/eslint-config').recommendedCore(__dirname);
+module.exports = require('@nova-ai/eslint-config').recommendedCore(__dirname);

@@ -1,6 +1,6 @@
-# @odh-dashboard/jest-config
+# @nova-ai/jest-config
 
-Shared Jest configurations for all ODH Dashboard packages.
+Shared Jest configurations for all Nova AI Console packages.
 
 ## Purpose
 
@@ -11,7 +11,7 @@ Provides a consistent test runner setup across the monorepo — JSDOM environmen
 In your package `jest.config.ts`:
 
 ```ts
-import base from '@odh-dashboard/jest-config';
+import base from '@nova-ai/jest-config';
 
 export default { ...base, displayName: 'my-package' };
 ```
@@ -23,4 +23,3 @@ export default { ...base, displayName: 'my-package' };
 | `config/` | Named preset configs (dom, node) |
 | `src/` | Config construction helpers |
 
-> For full documentation see [`docs/guidelines.md`](../../docs/guidelines.md).

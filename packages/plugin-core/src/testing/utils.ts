@@ -1,4 +1,4 @@
-import { Extension } from '@openshift/dynamic-plugin-sdk';
+import type { Extension } from '../core/sdk-types';
 import { isCodeRef } from '../core/internal/coderefs';
 import { visitDeep } from '../core/internal/objects';
 

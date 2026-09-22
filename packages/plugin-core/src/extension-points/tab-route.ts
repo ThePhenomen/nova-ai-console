@@ -1,5 +1,4 @@
-import type { Extension } from '@openshift/dynamic-plugin-sdk';
-import type { AccessReviewResourceAttributes } from '@odh-dashboard/k8s-core';
+import type { Extension } from '../core/sdk-types';
 import type { NavItemProperties } from './navigation';
 import type { ComponentCodeRef } from '../core/types';
 
@@ -27,8 +26,6 @@ export type TabRoutePageExtension = Extension<
      * Should include a wildcard suffix (e.g. '/ai-hub/models/*') to capture tab sub-paths.
      */
     path: string;
-    /** The access review resource attributes for this item. */
-    accessReview?: AccessReviewResourceAttributes;
     /**
      * Object type string for the page title icon (e.g. 'registered-models').
      * Used with TitleWithIcon to render a page-level title above the tabs.

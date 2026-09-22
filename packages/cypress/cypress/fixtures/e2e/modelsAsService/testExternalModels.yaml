@@ -1,4 +1,0 @@
-# testExternalModels.cy.ts Test Data #
-projectResourceName: 'test-external-models'
-emptyProjectResourceName: 'test-external-models-empty'
-resourceName: 'e2e-openai'

@@ -1,1 +1,1 @@
-module.exports = require('@odh-dashboard/eslint-config').recommendedTypescript(__dirname);
+module.exports = require('@nova-ai/eslint-config').recommendedTypescript(__dirname);

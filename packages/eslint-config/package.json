@@ -1,7 +1,7 @@
 {
   "private": true,
-  "name": "@odh-dashboard/eslint-config",
-  "description": "ODH Dashboard ESLint rules and configs.",
+  "name": "@nova-ai/eslint-config",
+  "description": "Nova AI Console ESLint rules and configs.",
   "version": "0.0.0",
   "type": "commonjs",
   "main": "./index.js",

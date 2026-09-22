@@ -1,4 +1,0 @@
-{
-  "extends": "@odh-dashboard/tsconfig/tsconfig.json",
-  "exclude": ["node_modules", "upstream"]
-}

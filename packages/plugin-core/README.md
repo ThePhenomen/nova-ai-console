@@ -1,23 +1,27 @@
-# @odh-dashboard/plugin-core
+# @nova-ai/plugin-core
 
-Core plugin infrastructure and extension-point definitions for the ODH Dashboard modular architecture.
+Core plugin infrastructure and extension-point definitions for the Nova AI Console.
 
 ## Purpose
 
-Defines the contracts that all modular packages must implement to integrate with the main dashboard shell. Provides hook types, registration helpers, and extension point interfaces used by Module Federation remotes.
+Defines the contracts a distribution uses to contribute navigation, routes, tabs and
+masthead content to the app shell, plus the plugin store and React hooks the shell uses
+to consume them.
 
-## Key Exports
+## Entry points
 
-| Export | Description |
-|--------|-------------|
-| Extension types | TypeScript interfaces for all supported extension points |
-| Registration helpers | Utilities for packages to declare their extensions |
-| Hook utilities | React hooks for consuming extension points in the shell |
+| Import                             | Contents                                             |
+| ---------------------------------- | ---------------------------------------------------- |
+| `@nova-ai/plugin-core`             | `PluginStore`, `PluginStoreProvider`, `useExtensions`, `useResolvedExtensions`, `LazyCodeRefComponent`, core types |
+| `@nova-ai/plugin-core/extension-points` | Extension types and type guards (`navigation`, `routes`, `tab-route`, `masthead`) |
+| `@nova-ai/plugin-core/testing`     | `expectExtensionsToBeValid` for unit tests            |
 
 ## Usage
 
 ```ts
-import { defineExtension, useExtensions } from '@odh-dashboard/plugin-core';
+import { useExtensions } from '@nova-ai/plugin-core';
+import { isTabRoutePageExtension } from '@nova-ai/plugin-core/extension-points';
 ```
 
-> For full documentation see [`docs/guidelines.md`](../../docs/guidelines.md).
+Extension `component` properties must be plain `() => import('...')` code references so
+they can be resolved lazily.

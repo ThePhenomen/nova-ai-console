@@ -1,9 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import type { Extension } from '@openshift/dynamic-plugin-sdk';
-import { PluginStoreProvider } from '@openshift/dynamic-plugin-sdk';
-import { PluginStore } from '@odh-dashboard/plugin-core';
+import { PluginStoreProvider, PluginStore, type Extension } from '@nova-ai/plugin-core';
 import Shell from './Shell';
 import ShellHeader from './ShellHeader';
 import ShellNav from './ShellNav';

@@ -1,5 +1,4 @@
-import type { Extension } from '@openshift/dynamic-plugin-sdk';
-import type { AccessReviewResourceAttributes } from '@odh-dashboard/k8s-core';
+import type { Extension } from '../core/sdk-types';
 import type { ComponentCodeRef } from '../core/types';
 
 export type NavTrackingEvent = {
@@ -17,10 +16,6 @@ export type HrefNavItemExtension = Extension<
   NavItemProperties & {
     /** The link href value. */
     href: string;
-    /** The access review resource attributes for this item. */
-    accessReview?: AccessReviewResourceAttributes;
-    /** The status provider ID for this item. */
-    statusProviderId?: string;
     /**
      * The react-router path pattern to match against the current location.
      * If not supplied, the `href` is used to match against current location.

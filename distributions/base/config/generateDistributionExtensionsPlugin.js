@@ -7,17 +7,15 @@ const VirtualModulesPlugin = require('webpack-virtual-modules');
  * Webpack plugin that reads a distribution.yaml config file and generates
  * a virtual module with extension imports for all declared packages.
  *
- * Follows the same pattern as frontend/config/generateExtensionsPlugin.js.
- *
  * @example
  * new GenerateDistributionExtensionsPlugin({
  *   configPath: path.resolve(__dirname, '../distribution.yaml'),
  *   targetFile: 'src/distribution-extensions.ts',
  *   envOverrides: {
- *     ENABLE_MODEL_SERVING: {
- *       package: '@odh-dashboard/model-serving',
- *       extensionsPath: './extensions/odh',
- *       featureFlags: { 'model-serving-shell': true },
+ *     ENABLE_MY_FEATURE: {
+ *       package: '@nova-ai/my-feature',
+ *       extensionsPath: './extensions',
+ *       featureFlags: { 'my-feature': true },
  *     },
  *   },
  * })
@@ -148,7 +146,7 @@ class GenerateDistributionExtensionsPlugin {
     }
 
     if (packages.length === 0) {
-      return `import type { Extension } from '@openshift/dynamic-plugin-sdk';
+      return `import type { Extension } from '@nova-ai/plugin-core';
 
 const pluginExtensions: Record<string, Extension[]> = {};
 
@@ -169,7 +167,7 @@ export default pluginExtensions;
 
     const entries = packages.map((pkg, i) => `  '${pkg.name}': extensions${i}`).join(',\n');
 
-    return `import type { Extension } from '@openshift/dynamic-plugin-sdk';
+    return `import type { Extension } from '@nova-ai/plugin-core';
 ${imports}
 
 const pluginExtensions: Record<string, Extension[]> = {

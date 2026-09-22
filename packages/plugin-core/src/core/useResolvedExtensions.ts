@@ -4,7 +4,7 @@ import type {
   LoadedExtension,
   ResolvedExtension,
   ExtensionPredicate,
-} from '@openshift/dynamic-plugin-sdk';
+} from './sdk-types';
 import { resolveCodeRefValues } from './internal/coderefs';
 import { useExtensions } from './useExtensions';
 

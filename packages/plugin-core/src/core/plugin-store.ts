@@ -5,8 +5,8 @@ import type {
   FeatureFlags,
   AnyObject,
   Extension,
-} from '@openshift/dynamic-plugin-sdk';
-import { PluginEventType } from '@openshift/dynamic-plugin-sdk';
+} from './sdk-types';
+import { PluginEventType } from './sdk-types';
 import { isEqual, pickBy } from 'lodash-es';
 
 const uuidv4 = () =>

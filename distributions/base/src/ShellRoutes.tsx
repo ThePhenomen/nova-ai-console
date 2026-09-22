@@ -1,14 +1,14 @@
 import React from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { Spinner, Bullseye } from '@patternfly/react-core';
-import { LazyCodeRefComponent, useExtensions } from '@odh-dashboard/plugin-core';
+import { LazyCodeRefComponent, useExtensions } from '@nova-ai/plugin-core';
 import {
   isRouteExtension,
   isTabRoutePageExtension,
   isTabRouteTabExtension,
   type TabRoutePageExtension,
   type TabRouteTabExtension,
-} from '@odh-dashboard/plugin-core/extension-points';
+} from '@nova-ai/plugin-core/extension-points';
 import NotFound from './NotFound';
 import TabRoutePage from './TabRoutePage';
 import { ErrorBoundary } from './ErrorBoundary';
