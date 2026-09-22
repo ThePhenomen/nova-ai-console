@@ -1,6 +1,6 @@
 import type {
   AuthUser,
-  ConsolePersona,
+  ConsoleRole,
   PlatformAccess,
   PlatformBindingSubject,
   PlatformGroupKind,
@@ -12,24 +12,18 @@ import type {
 
 export const CONSOLE_SERVICE_LABEL = 'nova-ai.io/console-service';
 export const CONSOLE_PERSONA_LABEL = 'nova-ai.io/console-persona';
+export const CONTRIBUTOR_AGGREGATE_LABEL = 'nova-ai.io/aggregate-to-developer';
 
-export const CATALOG_PERSONA_ROLES: Record<string, ConsolePersona> = {
-  'nova-ai-admin': 'admin',
-  'nova-ai-developer': 'developer',
-  'nova-ai-viewer': 'viewer',
-};
-
-const PERSONA_RANK: Record<ConsolePersona, number> = {
+const ROLE_RANK: Record<ConsoleRole, number> = {
   none: 0,
-  viewer: 1,
-  developer: 2,
-  admin: 3,
+  contributor: 1,
+  admin: 2,
 };
 
 const OIDC_AUTH_PREFIX = 'oidc-auth-';
 
-export const maxPersona = (left: ConsolePersona, right: ConsolePersona): ConsolePersona =>
-  PERSONA_RANK[left] >= PERSONA_RANK[right] ? left : right;
+export const maxRole = (left: ConsoleRole, right: ConsoleRole): ConsoleRole =>
+  ROLE_RANK[left] >= ROLE_RANK[right] ? left : right;
 
 const unique = (values: string[]): string[] =>
   [...new Set(values.map((value) => value.trim()).filter((value) => value !== ''))].toSorted();
@@ -205,12 +199,28 @@ export const bindingMatchesUser = (
   );
 };
 
-export const personaFromRole = (role: PlatformRoleKind): ConsolePersona | null => {
-  const labeled = role.metadata.labels?.[CONSOLE_PERSONA_LABEL];
-  if (labeled === 'admin' || labeled === 'developer' || labeled === 'viewer') {
-    return labeled;
+const selectorHas = (role: PlatformRoleKind, label: string): boolean =>
+  (role.spec?.kubernetes?.clusterRoleSelectors ?? []).some(
+    (selector) => selector.matchLabels?.[label] === 'true',
+  );
+
+export const roleGrantsAdmin = (role: PlatformRoleKind): boolean =>
+  role.metadata.labels?.[CONSOLE_PERSONA_LABEL] === 'admin';
+
+export const roleGrantsContributor = (role: PlatformRoleKind): boolean =>
+  !roleGrantsAdmin(role) &&
+  (role.metadata.name === 'nova-ai-contributor' ||
+    role.metadata.name === 'nova-ai-developer' ||
+    selectorHas(role, CONTRIBUTOR_AGGREGATE_LABEL));
+
+export const consoleRoleFromPlatformRole = (role: PlatformRoleKind): ConsoleRole => {
+  if (roleGrantsAdmin(role)) {
+    return 'admin';
   }
-  return CATALOG_PERSONA_ROLES[role.metadata.name] ?? null;
+  if (roleGrantsContributor(role)) {
+    return 'contributor';
+  }
+  return 'none';
 };
 
 export const servicesFromRole = (role: PlatformRoleKind): string[] => {
@@ -224,9 +234,6 @@ export const servicesFromRole = (role: PlatformRoleKind): string[] => {
   if (fromLabel.length > 0) {
     return unique(fromLabel);
   }
-  if (personaFromRole(role)) {
-    return [];
-  }
   const applications = role.spec?.oidc?.applications ?? [];
   return unique(
     applications
@@ -236,18 +243,18 @@ export const servicesFromRole = (role: PlatformRoleKind): string[] => {
 };
 
 const emptyProjectAccess = (): ProjectAccess => ({
-  persona: 'none',
+  role: 'none',
   canView: false,
   canEdit: false,
   canManageRbac: false,
   services: [],
 });
 
-const projectAccessFrom = (persona: ConsolePersona, services: string[]): ProjectAccess => ({
-  persona,
-  canView: PERSONA_RANK[persona] >= PERSONA_RANK.viewer,
-  canEdit: PERSONA_RANK[persona] >= PERSONA_RANK.developer,
-  canManageRbac: persona === 'admin',
+const projectAccessFrom = (role: ConsoleRole, services: string[]): ProjectAccess => ({
+  role,
+  canView: role !== 'none',
+  canEdit: role !== 'none',
+  canManageRbac: role === 'admin',
   services: unique(services),
 });
 
@@ -255,7 +262,7 @@ export const bootstrapAccess = (username?: string): PlatformAccess => {
   const project = projectAccessFrom('admin', []);
   return {
     source: 'bootstrap',
-    clusterPersona: 'admin',
+    consoleRole: 'admin',
     canCreateProjects: true,
     username,
     services: [],
@@ -266,7 +273,7 @@ export const bootstrapAccess = (username?: string): PlatformAccess => {
 
 export const emptyAccess = (source: PlatformAccess['source'], username?: string): PlatformAccess => ({
   source,
-  clusterPersona: 'none',
+  consoleRole: 'none',
   canCreateProjects: false,
   username,
   services: [],
@@ -281,22 +288,20 @@ export type AccessInput = {
 };
 
 /**
- * Console authorization follows nova-auth-operator: PlatformRole is WHAT,
- * PlatformRoleBinding is WHO and WHERE (`kubernetes.target`).
- *
- * WHO is a User CR and/or a Group CR. The signed-in OIDC subject (StarVault
- * entity id in `sub`) is resolved to a User CR, then to Groups via
- * `Group.spec.members`, `User.status.groups`, and the token `groups` claim.
- * A binding matches if any subject User/Group name or resolved identity
- * equals one of those aliases.
+ * UI admin vs contributor is `nova-ai.io/console-persona: admin` on the bound
+ * PlatformRole. Without that label the console is contributor: Projects is
+ * always in the nav, extra sidebar tabs come from nova-ai.io/console-service,
+ * and kubernetes.target still decides which namespaces are listed.
+ * Kubernetes aggregation selectors are independent of the console label.
  */
 export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
   const rolesByName = new Map(input.roles.map((role) => [role.metadata.name, role]));
-  let clusterPersona: ConsolePersona = 'none';
+  let consoleRole: ConsoleRole = 'none';
   const clusterServices: string[] = [];
-  const projectPersonas = new Map<string, ConsolePersona>();
+  const projectRoles = new Map<string, ConsoleRole>();
   const projectServices = new Map<string, string[]>();
   const visibleProjects = new Set<string>();
+  let seesAllProjects = false;
 
   for (const binding of input.bindings) {
     if (!bindingMatchesUser(binding, input.user)) {
@@ -306,22 +311,19 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
     if (!role) {
       continue;
     }
-    const persona = personaFromRole(role);
+    const boundRole = consoleRoleFromPlatformRole(role);
     const services = servicesFromRole(role);
     const target =
       binding.status?.appliedTarget?.target ?? binding.spec.kubernetes?.target ?? 'None';
     const namespaces =
       binding.status?.appliedTarget?.namespaces ?? binding.spec.kubernetes?.namespaces ?? [];
 
+    consoleRole = maxRole(consoleRole, boundRole === 'none' ? 'contributor' : boundRole);
+
     if (target === 'Namespaces') {
       namespaces.forEach((namespace) => {
         visibleProjects.add(namespace);
-        if (persona) {
-          projectPersonas.set(
-            namespace,
-            maxPersona(projectPersonas.get(namespace) ?? 'none', persona),
-          );
-        }
+        projectRoles.set(namespace, maxRole(projectRoles.get(namespace) ?? 'none', boundRole));
         projectServices.set(
           namespace,
           unique([...(projectServices.get(namespace) ?? []), ...services]),
@@ -330,13 +332,11 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
       continue;
     }
 
-    if (persona) {
-      clusterPersona = maxPersona(clusterPersona, persona);
-    }
     clusterServices.push(...services);
+    if (target === 'Cluster') {
+      seesAllProjects = true;
+    }
   }
-
-  const seesAllProjects = PERSONA_RANK[clusterPersona] >= PERSONA_RANK.viewer;
 
   const grantedServices = unique([
     ...clusterServices,
@@ -345,40 +345,28 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
 
   return {
     source: 'oidc',
-    clusterPersona,
-    canCreateProjects: clusterPersona === 'admin',
+    consoleRole,
+    canCreateProjects: consoleRole === 'admin',
     username: input.user.username,
     services: grantedServices,
     forProject: (projectName: string) => {
-      const persona = maxPersona(clusterPersona, projectPersonas.get(projectName) ?? 'none');
-      if (persona === 'none' && !seesAllProjects && !visibleProjects.has(projectName)) {
+      const role = maxRole(
+        seesAllProjects ? consoleRole : 'none',
+        projectRoles.get(projectName) ?? 'none',
+      );
+      const canSee = seesAllProjects || visibleProjects.has(projectName) || role !== 'none';
+      if (!canSee) {
         return emptyProjectAccess();
       }
       const services = unique([
         ...clusterServices,
         ...(projectServices.get(projectName) ?? []),
       ]);
-      if (persona === 'none') {
-        if (services.length === 0) {
-          return emptyProjectAccess();
-        }
-        return {
-          persona: 'viewer',
-          canView: true,
-          canEdit: false,
-          canManageRbac: false,
-          services,
-        };
-      }
-      return projectAccessFrom(persona, services);
+      const effective: ConsoleRole = role === 'none' ? 'contributor' : role;
+      return projectAccessFrom(effective, services);
     },
-    canViewProject: (projectName: string) => {
-      if (seesAllProjects) {
-        return true;
-      }
-      const persona = maxPersona(clusterPersona, projectPersonas.get(projectName) ?? 'none');
-      return persona !== 'none' || visibleProjects.has(projectName);
-    },
+    canViewProject: (projectName: string) =>
+      seesAllProjects || visibleProjects.has(projectName),
   };
 };
 

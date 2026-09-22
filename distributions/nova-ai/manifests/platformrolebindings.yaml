@@ -1,6 +1,7 @@
 # WHERE lives on PlatformRoleBinding, not on PlatformRole or User.
-# target: Cluster → console lists every nova-ai-console project (nova-ai-admin).
-# target: Namespaces → only the listed projects (nova-ai-developer).
+# target: Cluster → console lists every nova-ai-console project (admin).
+# target: Namespaces → only the listed projects (contributor).
+# Sidebar extras (Experiments) come from nova-ai.io/console-service on the role.
 ---
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRoleBinding

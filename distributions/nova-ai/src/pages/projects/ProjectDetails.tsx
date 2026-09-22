@@ -4,7 +4,6 @@ import {
   Breadcrumb,
   BreadcrumbItem,
   Content,
-  Label,
   PageSection,
   Tab,
   Tabs,
@@ -80,18 +79,6 @@ const ProjectDetails: React.FC = () => {
           <BreadcrumbItem isActive>{projectName}</BreadcrumbItem>
         </Breadcrumb>
         <Content component="h1">{projectName}</Content>
-        <Label
-          isCompact
-          color={
-            projectAccess.persona === 'admin'
-              ? 'green'
-              : projectAccess.persona === 'developer'
-                ? 'blue'
-                : 'grey'
-          }
-        >
-          {projectAccess.persona}
-        </Label>
       </PageSection>
       <PageSection type="tabs" hasBodyWrapper={false}>
         <Tabs

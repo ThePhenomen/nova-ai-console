@@ -98,7 +98,7 @@ const ProjectsList: React.FC = () => {
           connection as cluster admin.
         </Alert>
       ) : null}
-      {session && access.source === 'oidc' && access.clusterPersona === 'none' && visibleProjects.length === 0 ? (
+      {session && access.source === 'oidc' && access.consoleRole === 'none' && visibleProjects.length === 0 ? (
         <Alert variant="info" isInline title="No platform role assigned" style={{ marginBottom: '1rem' }}>
           Signed in as {access.username ?? session.user.username}
           {session.user.sub && session.user.sub !== (access.username ?? session.user.username)
@@ -106,7 +106,7 @@ const ProjectsList: React.FC = () => {
             : ''}
           . Bind this User CR, or a Group that lists it in spec.members, in a
           PlatformRoleBinding to nova-ai-admin or nova-ai-developer
-          (kubernetes.target: Cluster for admin, Namespaces for a project).
+          (kubernetes.target: Cluster for admin, Namespaces for a contributor project).
         </Alert>
       ) : null}
       {accessError ? (

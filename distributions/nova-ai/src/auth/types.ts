@@ -1,6 +1,6 @@
 import type { K8sObjectMeta } from '../cluster/types';
 
-export type ConsolePersona = 'none' | 'viewer' | 'developer' | 'admin';
+export type ConsoleRole = 'none' | 'contributor' | 'admin';
 
 export type OidcConfig = {
   issuer: string;
@@ -111,7 +111,7 @@ export type PlatformRoleBindingKind = {
 };
 
 export type ProjectAccess = {
-  persona: ConsolePersona;
+  role: ConsoleRole;
   canView: boolean;
   canEdit: boolean;
   canManageRbac: boolean;
@@ -122,7 +122,7 @@ export type AccessSource = 'bootstrap' | 'oidc' | 'unavailable';
 
 export type PlatformAccess = {
   source: AccessSource;
-  clusterPersona: ConsolePersona;
+  consoleRole: ConsoleRole;
   canCreateProjects: boolean;
   username?: string;
   services: string[];
