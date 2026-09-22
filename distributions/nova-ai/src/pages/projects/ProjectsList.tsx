@@ -100,8 +100,12 @@ const ProjectsList: React.FC = () => {
       ) : null}
       {session && access.source === 'oidc' && access.clusterPersona === 'none' && visibleProjects.length === 0 ? (
         <Alert variant="info" isInline title="No platform role assigned" style={{ marginBottom: '1rem' }}>
-          Signed in as {session.user.username}, but no PlatformRoleBinding grants project access
-          yet.
+          Signed in as {access.username ?? session.user.username}
+          {session.user.sub && session.user.sub !== (access.username ?? session.user.username)
+            ? ` (entity ${session.user.sub})`
+            : ''}
+          . Bind this User CR in a PlatformRoleBinding to nova-ai-admin or nova-ai-developer
+          (kubernetes.target: Cluster for admin, Namespaces for a project).
         </Alert>
       ) : null}
       {accessError ? (

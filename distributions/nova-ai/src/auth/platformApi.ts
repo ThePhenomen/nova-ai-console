@@ -1,7 +1,11 @@
 import { k8sRequest } from '../cluster/k8sClient';
 import type { K8sList } from '../cluster/types';
 import { hasConsoleScope } from '../consoleScope';
-import type { PlatformRoleBindingKind, PlatformRoleKind } from './types';
+import type {
+  PlatformRoleBindingKind,
+  PlatformRoleKind,
+  PlatformUserKind,
+} from './types';
 
 export const PLATFORM_AUTH_API = '/apis/auth.nova-platform.io/v1alpha1';
 
@@ -9,6 +13,9 @@ export const listPlatformRoles = (): Promise<PlatformRoleKind[]> =>
   k8sRequest<K8sList<PlatformRoleKind>>(`${PLATFORM_AUTH_API}/platformroles`).then((list) =>
     list.items.filter((role) => hasConsoleScope(role.metadata.labels)),
   );
+
+export const listPlatformUsers = (): Promise<PlatformUserKind[]> =>
+  k8sRequest<K8sList<PlatformUserKind>>(`${PLATFORM_AUTH_API}/users`).then((list) => list.items);
 
 export const listPlatformRoleBindings = (): Promise<PlatformRoleBindingKind[]> =>
   k8sRequest<K8sList<PlatformRoleBindingKind>>(

@@ -14,12 +14,29 @@ export type AuthUser = {
   username: string;
   email?: string;
   groups: string[];
+  aliases?: string[];
 };
 
 export type AuthSession = {
   accessToken: string;
   idToken?: string;
   user: AuthUser;
+};
+
+export type PlatformUserKind = {
+  apiVersion?: string;
+  kind?: string;
+  metadata: K8sObjectMeta;
+  spec?: {
+    username?: string;
+  };
+  status?: {
+    username?: string;
+    entityId?: string;
+    email?: string;
+    displayName?: string;
+    groups?: string[];
+  };
 };
 
 export type PlatformRoleKind = {

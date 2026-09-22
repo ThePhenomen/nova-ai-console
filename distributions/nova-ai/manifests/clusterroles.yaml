@@ -1,0 +1,68 @@
+# ClusterRoles aggregated by nova-ai-admin / nova-ai-developer.
+# PlatformRole.kubernetes.clusterRoleSelectors only matches ClusterRole.
+# Bind via PlatformRoleBinding kubernetes.target: Namespaces (developer/admin
+# in a project) or Cluster (admin creating projects).
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nova-ai-aggregate-developer
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/aggregate-to-developer: "true"
+rules:
+  # View the project the user is bound to.
+  - apiGroups: [""]
+    resources: ["namespaces", "resourcequotas", "pods", "pods/status", "events"]
+    verbs: ["get", "list", "watch"]
+  # Namespaced KServe CRs — full access in the bound namespace.
+  - apiGroups: ["serving.kserve.io"]
+    resources:
+      - inferencegraphs
+      - inferenceservices
+      - llminferenceserviceconfigs
+      - llminferenceservices
+      - localmodelcaches
+      - localmodelnodes
+      - servingruntimes
+      - trainedmodels
+    verbs: ["*"]
+  # Cluster-scoped KServe CRs: view only (RoleBinding would otherwise grant
+  # cluster-wide write).
+  - apiGroups: ["serving.kserve.io"]
+    resources:
+      - clusterservingruntimes
+      - clusterstoragecontainers
+      - localmodelnodegroups
+    verbs: ["get", "list", "watch"]
+  # Namespaced Ray CRs — full access in the bound namespace.
+  - apiGroups: ["ray.io"]
+    resources:
+      - rayclusters
+      - rayjobs
+      - rayservices
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nova-ai-aggregate-admin
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/aggregate-to-admin: "true"
+rules:
+  # Create and manage projects (namespaces + quotas).
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["resourcequotas"]
+    verbs: ["*"]
+  # Manage console roles and assignments.
+  - apiGroups: ["auth.nova-platform.io"]
+    resources:
+      - platformroles
+      - platformrolebindings
+      - platformroles/status
+      - platformrolebindings/status
+    verbs: ["*"]

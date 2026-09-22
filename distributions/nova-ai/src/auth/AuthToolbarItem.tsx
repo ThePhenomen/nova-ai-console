@@ -59,7 +59,7 @@ const AuthToolbarItem: React.FC = () => {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
       <Label color={personaColor(access.clusterPersona)} isCompact icon={<UserIcon />}>
-        {session.user.username} · {personaLabel(access.source, access.clusterPersona)}
+        {access.username ?? session.user.username} · {personaLabel(access.source, access.clusterPersona)}
       </Label>
       <Button variant="link" isInline onClick={() => logoutOidc()}>
         Sign out

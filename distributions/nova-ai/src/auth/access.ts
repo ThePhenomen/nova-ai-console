@@ -5,6 +5,7 @@ import type {
   PlatformBindingSubject,
   PlatformRoleBindingKind,
   PlatformRoleKind,
+  PlatformUserKind,
   ProjectAccess,
 } from './types';
 
@@ -37,43 +38,103 @@ const identityTail = (identity: string): string => {
   return parts[parts.length - 1] ?? identity;
 };
 
-const subjectMatchesUser = (subject: PlatformBindingSubject, user: AuthUser): boolean => {
-  if (subject.kind === 'User') {
-    return (
-      subject.name === user.username ||
-      subject.name === user.sub ||
-      subject.name === user.email ||
-      subject.name === `oidc:user:${user.username}`
-    );
+const addIdentity = (bucket: Set<string>, value?: string): void => {
+  if (!value) {
+    return;
   }
-  if (subject.kind === 'Group') {
-    return (
-      user.groups.includes(subject.name) ||
-      user.groups.includes(`oidc:group:${subject.name}`)
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return;
+  }
+  bucket.add(trimmed);
+  bucket.add(trimmed.toLowerCase());
+  const tail = identityTail(trimmed);
+  if (tail !== trimmed) {
+    bucket.add(tail);
+    bucket.add(tail.toLowerCase());
+  }
+};
+
+export const enrichUserFromPlatformUsers = (
+  user: AuthUser,
+  platformUsers: PlatformUserKind[],
+): AuthUser => {
+  const aliases = new Set<string>(user.aliases ?? []);
+  addIdentity(aliases, user.sub);
+  addIdentity(aliases, user.username);
+  addIdentity(aliases, user.email);
+  user.groups.forEach((group) => addIdentity(aliases, group));
+
+  const matched = platformUsers.find((platformUser) => {
+    const candidates = [
+      platformUser.metadata.name,
+      platformUser.spec?.username,
+      platformUser.status?.username,
+      platformUser.status?.entityId,
+      platformUser.status?.email,
+      platformUser.status?.displayName,
+    ];
+    return candidates.some((candidate) => {
+      if (!candidate) {
+        return false;
+      }
+      return (
+        aliases.has(candidate) ||
+        aliases.has(candidate.toLowerCase()) ||
+        aliases.has(identityTail(candidate))
+      );
+    });
+  });
+
+  if (matched) {
+    addIdentity(aliases, matched.metadata.name);
+    addIdentity(aliases, matched.spec?.username);
+    addIdentity(aliases, matched.status?.username);
+    addIdentity(aliases, matched.status?.entityId);
+    addIdentity(aliases, matched.status?.email);
+    addIdentity(aliases, matched.status?.displayName);
+    (matched.status?.groups ?? []).forEach((group) => addIdentity(aliases, group));
+  }
+
+  const displayName =
+    matched?.status?.username ||
+    matched?.spec?.username ||
+    matched?.metadata.name ||
+    user.username;
+
+  return {
+    ...user,
+    username: displayName,
+    email: user.email ?? matched?.status?.email,
+    groups: unique([...user.groups, ...(matched?.status?.groups ?? [])]),
+    aliases: [...aliases],
+  };
+};
+
+const userIdentities = (user: AuthUser): Set<string> => {
+  const bucket = new Set<string>();
+  addIdentity(bucket, user.sub);
+  addIdentity(bucket, user.username);
+  addIdentity(bucket, user.email);
+  user.groups.forEach((group) => addIdentity(bucket, group));
+  (user.aliases ?? []).forEach((alias) => addIdentity(bucket, alias));
+  return bucket;
+};
+
+const subjectMatchesUser = (subject: PlatformBindingSubject, user: AuthUser): boolean => {
+  const identities = userIdentities(user);
+  const candidates = [subject.name, subject.identity, identityTail(subject.name)];
+  if (subject.identity) {
+    candidates.push(identityTail(subject.identity));
+  }
+  if (subject.kind === 'User' || subject.kind === 'Group' || !subject.kind) {
+    return candidates.some(
+      (candidate) =>
+        Boolean(candidate) &&
+        (identities.has(candidate) || identities.has(candidate.toLowerCase())),
     );
   }
   return false;
-};
-
-const resolvedMatchesUser = (
-  subject: PlatformBindingSubject & { identity?: string },
-  user: AuthUser,
-): boolean => {
-  if (subjectMatchesUser(subject, user)) {
-    return true;
-  }
-  if (!subject.identity) {
-    return false;
-  }
-  const tail = identityTail(subject.identity);
-  return (
-    tail === user.username ||
-    tail === user.sub ||
-    tail === user.email ||
-    user.groups.includes(tail) ||
-    user.groups.includes(subject.identity) ||
-    subject.identity.endsWith(`:${user.username}`)
-  );
 };
 
 export const bindingMatchesUser = (
@@ -84,7 +145,7 @@ export const bindingMatchesUser = (
     return true;
   }
   return (binding.status?.resolvedSubjects ?? []).some((subject) =>
-    resolvedMatchesUser(subject, user),
+    subjectMatchesUser(subject, user),
   );
 };
 

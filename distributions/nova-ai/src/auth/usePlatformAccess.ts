@@ -5,8 +5,9 @@ import {
   bootstrapAccess,
   computePlatformAccess,
   emptyAccess,
+  enrichUserFromPlatformUsers,
 } from './access';
-import { listPlatformRoleBindings, listPlatformRoles } from './platformApi';
+import { listPlatformRoleBindings, listPlatformRoles, listPlatformUsers } from './platformApi';
 import type { PlatformAccess } from './types';
 import { useAuthSession } from './useAuthSession';
 
@@ -44,12 +45,14 @@ export const usePlatformAccess = (): PlatformAccessState => {
       setIsLoading(true);
       setError(null);
       try {
-        const [roles, bindings] = await Promise.all([
+        const [roles, bindings, platformUsers] = await Promise.all([
           listPlatformRoles(),
           listPlatformRoleBindings(),
+          listPlatformUsers().catch((): [] => []),
         ]);
         if (!cancelled) {
-          setAccess(computePlatformAccess({ user: session.user, roles, bindings }));
+          const user = enrichUserFromPlatformUsers(session.user, platformUsers);
+          setAccess(computePlatformAccess({ user, roles, bindings }));
         }
       } catch (err) {
         if (!cancelled) {

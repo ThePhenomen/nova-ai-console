@@ -232,9 +232,17 @@ export const userFromClaims = (claims: Record<string, unknown>): AuthUser => {
   return {
     sub,
     username:
-      claimString(claims, ['preferred_username', 'name', 'email', 'sub']) ?? sub,
+      claimString(claims, ['preferred_username', 'username', 'nickname', 'name', 'email']) ?? sub,
     email: claimString(claims, ['email']),
     groups: claimGroups(claims),
+    aliases: [
+      sub,
+      claimString(claims, ['preferred_username']),
+      claimString(claims, ['username']),
+      claimString(claims, ['nickname']),
+      claimString(claims, ['name']),
+      claimString(claims, ['email']),
+    ].filter((value): value is string => Boolean(value)),
   };
 };
 
