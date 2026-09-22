@@ -2,6 +2,8 @@
 export const CONSOLE_LABEL_VALUE = 'nova-ai-console';
 
 /** Canonical key used when the console creates namespaces and PlatformRoles. */
+export const CONSOLE_LABEL_KEY = 'nova-ai.io/console';
+
 export const GRANTED_IN_PROJECT_ANNOTATION = 'nova-ai.io/granted-in-project';
 
 export const consoleScopeLabels = (): Record<string, string> => ({
