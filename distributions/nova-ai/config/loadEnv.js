@@ -44,4 +44,32 @@ const loadEnvFile = (filePath) => {
 
 ENV_FILES.forEach(loadEnvFile);
 
-module.exports = {};
+const parseKubeconfig = require('./parseKubeconfig');
+
+const kubeconfigFromEnv = (() => {
+  const encoded = process.env.KUBECONFIG_BASE64 || process.env.KUBECONFIG_B64;
+  if (!encoded) {
+    return null;
+  }
+  let text;
+  try {
+    text = Buffer.from(encoded.replace(/\s/g, ''), 'base64').toString('utf8');
+  } catch {
+    return null;
+  }
+  if (!text.trim()) {
+    return null;
+  }
+  const parsed = parseKubeconfig(text);
+  if (!parsed.apiServer) {
+    // eslint-disable-next-line no-console
+    console.warn('[loadEnv] KUBECONFIG_BASE64 is set but does not contain a cluster server URL.');
+    return null;
+  }
+  if (process.env.KUBECONFIG_API_SERVER === undefined) {
+    process.env.KUBECONFIG_API_SERVER = parsed.apiServer;
+  }
+  return parsed;
+})();
+
+module.exports = { kubeconfigFromEnv };

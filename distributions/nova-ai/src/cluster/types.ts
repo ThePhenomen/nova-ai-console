@@ -4,6 +4,8 @@ export type ClusterConnection = {
   clientCertificateData?: string;
   clientKeyData?: string;
   certificateAuthorityData?: string;
+  /** Credentials live on the webpack proxy from KUBECONFIG_BASE64, not in the browser. */
+  useEnvKubeconfig?: boolean;
 };
 
 export type K8sObjectMeta = {
@@ -74,6 +76,9 @@ export type RoleBindingKind = {
 };
 
 export const hasClusterCredentials = (connection: ClusterConnection): boolean => {
+  if (connection.useEnvKubeconfig && connection.apiServer.trim() !== '') {
+    return true;
+  }
   if (connection.token && connection.token.trim() !== '') {
     return true;
   }

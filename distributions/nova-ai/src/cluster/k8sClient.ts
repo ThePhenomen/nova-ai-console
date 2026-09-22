@@ -48,13 +48,20 @@ let activeSessionId: string | null = null;
 let activeSessionKey: string | null = null;
 
 const connectionKey = (connection: ClusterConnection): string =>
-  [
-    connection.apiServer,
-    connection.token ?? '',
-    connection.clientCertificateData ?? '',
-    connection.clientKeyData ?? '',
-    connection.certificateAuthorityData ?? '',
-  ].join('\0');
+  connection.useEnvKubeconfig
+    ? `env\0${connection.apiServer}`
+    : [
+        connection.apiServer,
+        connection.token ?? '',
+        connection.clientCertificateData ?? '',
+        connection.clientKeyData ?? '',
+        connection.certificateAuthorityData ?? '',
+      ].join('\0');
+
+const sessionBody = (connection: ClusterConnection): unknown =>
+  connection.useEnvKubeconfig
+    ? { apiServer: connection.apiServer, useEnv: true }
+    : connection;
 
 const ensureSession = async (connection: ClusterConnection): Promise<string> => {
   const key = connectionKey(connection);
@@ -66,7 +73,7 @@ const ensureSession = async (connection: ClusterConnection): Promise<string> => 
     response = await fetch(SESSION_PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(connection),
+      body: JSON.stringify(sessionBody(connection)),
       cache: 'no-store',
     });
   } catch {

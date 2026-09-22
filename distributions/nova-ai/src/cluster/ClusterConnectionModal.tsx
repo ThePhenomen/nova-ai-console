@@ -12,7 +12,7 @@ import {
   TextArea,
   TextInput,
 } from '@patternfly/react-core';
-import { parseKubeconfig, normalizeToken } from './connectionStore';
+import { getEnvClusterConnection, parseKubeconfig, normalizeToken } from './connectionStore';
 import { clearClusterSession, K8sApiError, testClusterConnection } from './k8sClient';
 import { hasClusterCredentials, type ClusterConnection } from './types';
 import { useClusterConnection } from './useClusterConnection';
@@ -37,10 +37,14 @@ const parseApiServer = (value: string): string | null => {
 
 const ClusterConnectionModal: React.FC<ClusterConnectionModalProps> = ({ onClose }) => {
   const [connection, setConnection] = useClusterConnection();
+  const envConnection = getEnvClusterConnection();
+  const isEnvConnection = Boolean(connection?.useEnvKubeconfig);
   const [authMode, setAuthMode] = React.useState<AuthMode>(
     connection?.clientCertificateData ? 'kubeconfig' : 'token',
   );
-  const [apiServer, setApiServer] = React.useState(connection?.apiServer ?? '');
+  const [apiServer, setApiServer] = React.useState(
+    connection?.useEnvKubeconfig ? '' : (connection?.apiServer ?? ''),
+  );
   const [token, setToken] = React.useState(connection?.token ?? '');
   const [kubeconfig, setKubeconfig] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
@@ -122,6 +126,19 @@ const ClusterConnectionModal: React.FC<ClusterConnectionModalProps> = ({ onClose
               {error}
             </Alert>
           ) : null}
+          {envConnection ? (
+            <Alert
+              variant="info"
+              isInline
+              title={
+                isEnvConnection
+                  ? `Using kubeconfig from .env (${envConnection.apiServer})`
+                  : `KUBECONFIG_BASE64 in .env is set (${envConnection.apiServer}). Connect below to override it.`
+              }
+            >
+              Certs and tokens stay on the console server. Disconnect returns to this default.
+            </Alert>
+          ) : null}
           <FormGroup role="radiogroup" isInline fieldId="cluster-auth-mode" label="Credentials">
             <Radio
               id="cluster-auth-token"
@@ -186,7 +203,7 @@ const ClusterConnectionModal: React.FC<ClusterConnectionModalProps> = ({ onClose
         >
           Connect
         </Button>
-        {connection ? (
+        {connection && !isEnvConnection ? (
           <Button key="disconnect" variant="secondary" onClick={disconnect} isDisabled={isSaving}>
             Disconnect
           </Button>

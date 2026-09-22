@@ -40,8 +40,19 @@ const readStoredConnection = (): ClusterConnection | null => {
   }
 };
 
+export const getEnvClusterConnection = (): ClusterConnection | null => {
+  const apiServer =
+    typeof process.env.KUBECONFIG_API_SERVER === 'string'
+      ? process.env.KUBECONFIG_API_SERVER.trim().replace(/\/$/, '')
+      : '';
+  if (!apiServer) {
+    return null;
+  }
+  return { apiServer, useEnvKubeconfig: true };
+};
+
 let snapshot: ClusterConnection | null =
-  typeof window === 'undefined' ? null : readStoredConnection();
+  typeof window === 'undefined' ? null : readStoredConnection() ?? getEnvClusterConnection();
 
 const emit = (): void => {
   listeners.forEach((listener) => listener());
@@ -57,17 +68,20 @@ export const subscribeClusterConnection = (listener: () => void): (() => void) =
 };
 
 export const setClusterConnection = (next: ClusterConnection | null): void => {
-  snapshot = next
-    ? {
-        apiServer: next.apiServer.trim(),
-        token: asNonEmptyString(next.token),
-        clientCertificateData: asNonEmptyString(next.clientCertificateData),
-        clientKeyData: asNonEmptyString(next.clientKeyData),
-        certificateAuthorityData: asNonEmptyString(next.certificateAuthorityData),
-      }
-    : null;
+  if (next) {
+    snapshot = {
+      apiServer: next.apiServer.trim(),
+      token: asNonEmptyString(next.token),
+      clientCertificateData: asNonEmptyString(next.clientCertificateData),
+      clientKeyData: asNonEmptyString(next.clientKeyData),
+      certificateAuthorityData: asNonEmptyString(next.certificateAuthorityData),
+      ...(next.useEnvKubeconfig ? { useEnvKubeconfig: true } : {}),
+    };
+  } else {
+    snapshot = getEnvClusterConnection();
+  }
   try {
-    if (snapshot) {
+    if (snapshot && !snapshot.useEnvKubeconfig) {
       localStorage.setItem(CLUSTER_CONNECTION_STORAGE_KEY, JSON.stringify(snapshot));
     } else {
       localStorage.removeItem(CLUSTER_CONNECTION_STORAGE_KEY);

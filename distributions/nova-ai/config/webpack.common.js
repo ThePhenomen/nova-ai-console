@@ -24,6 +24,7 @@ module.exports = (overrides = {}) =>
             STARVAULT_OIDC_CLIENT_ID: process.env.STARVAULT_OIDC_CLIENT_ID || '',
             STARVAULT_OIDC_SCOPES: process.env.STARVAULT_OIDC_SCOPES || '',
             STARVAULT_OIDC_REDIRECT_URI: process.env.STARVAULT_OIDC_REDIRECT_URI || '',
+            KUBECONFIG_API_SERVER: process.env.KUBECONFIG_API_SERVER || '',
           }),
         }),
         new GenerateDistributionExtensionsPlugin({

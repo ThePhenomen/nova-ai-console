@@ -2,7 +2,7 @@ const http = require('http');
 const https = require('https');
 const crypto = require('crypto');
 const { URL } = require('url');
-require('./loadEnv');
+const { kubeconfigFromEnv } = require('./loadEnv');
 
 const PROXY_PREFIX = '/k8s-proxy';
 const SESSION_PATH = '/k8s-session';
@@ -44,7 +44,45 @@ const decodePem = (value) => {
   }
 };
 
+const envClusterSession = (() => {
+  if (!kubeconfigFromEnv?.apiServer) {
+    return null;
+  }
+  const token =
+    typeof kubeconfigFromEnv.token === 'string' && kubeconfigFromEnv.token.trim() !== ''
+      ? kubeconfigFromEnv.token.trim()
+      : undefined;
+  const cert = decodePem(kubeconfigFromEnv.clientCertificateData);
+  const key = decodePem(kubeconfigFromEnv.clientKeyData);
+  const ca = decodePem(kubeconfigFromEnv.certificateAuthorityData);
+  if (!token && !(cert && key)) {
+    return null;
+  }
+  return {
+    apiServer: kubeconfigFromEnv.apiServer,
+    token,
+    cert,
+    key,
+    ca,
+  };
+})();
+
+if (kubeconfigFromEnv?.apiServer && !envClusterSession) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[k8s-proxy] KUBECONFIG_BASE64 has a cluster URL but no token or client-certificate-data and client-key-data.',
+  );
+}
+
 const createSession = (body) => {
+  if (body.useEnv) {
+    if (!envClusterSession) {
+      throw new Error('KUBECONFIG_BASE64 is not set or is not a valid kubeconfig.');
+    }
+    const sessionId = crypto.randomUUID();
+    sessions.set(sessionId, envClusterSession);
+    return sessionId;
+  }
   const apiServer = typeof body.apiServer === 'string' ? body.apiServer.trim() : '';
   if (!apiServer) {
     throw new Error('apiServer is required');
