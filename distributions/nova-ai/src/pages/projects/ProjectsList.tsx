@@ -249,7 +249,7 @@ const ProjectsList: React.FC = () => {
       ) : null}
       <Toolbar>
         <ToolbarContent>
-          <ToolbarItem variant="search-filter">
+          <ToolbarItem>
             <SearchInput
               aria-label="Search projects"
               placeholder="Filter by name"
