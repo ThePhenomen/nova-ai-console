@@ -37,7 +37,7 @@ const readStoredSession = (): AuthSession | null => {
         : null;
     const sub = asNonEmptyString(userRecord?.sub);
     const username = asNonEmptyString(userRecord?.username);
-    if (!accessToken || !sub || !username) {
+    if (!accessToken || !userRecord || !sub || !username) {
       return null;
     }
     return {

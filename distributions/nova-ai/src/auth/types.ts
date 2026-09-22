@@ -50,6 +50,7 @@ export type PlatformBindingSubject = {
   kind: 'User' | 'Group' | 'ServiceAccount' | string;
   name: string;
   namespace?: string;
+  identity?: string;
 };
 
 export type KubernetesTarget = 'None' | 'Cluster' | 'Namespaces' | string;

@@ -180,13 +180,13 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
   const projectServices = new Map<string, string[]>();
   const visibleProjects = new Set<string>();
 
-  input.bindings.forEach((binding) => {
+  for (const binding of input.bindings) {
     if (!bindingMatchesUser(binding, input.user)) {
-      return;
+      continue;
     }
     const role = rolesByName.get(binding.spec.platformRoleRef.name);
     if (!role) {
-      return;
+      continue;
     }
     const persona = personaFromRole(role);
     const services = servicesFromRole(role);
@@ -209,14 +209,14 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
           unique([...(projectServices.get(namespace) ?? []), ...services]),
         );
       });
-      return;
+      continue;
     }
 
     if (persona) {
       clusterPersona = maxPersona(clusterPersona, persona);
     }
     clusterServices.push(...services);
-  });
+  }
 
   const seesAllProjects = PERSONA_RANK[clusterPersona] >= PERSONA_RANK.viewer;
 
