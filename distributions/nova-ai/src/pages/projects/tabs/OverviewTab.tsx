@@ -131,42 +131,6 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ projectName, canManageRbac = 
   return (
     <PageSection>
       <Stack hasGutter>
-        {canManageRbac ? (
-          <StackItem>
-            <ExpandableSection
-              toggleText="Project configuration"
-              isExpanded={isConfigOpen}
-              onToggle={(_event, expanded) => setIsConfigOpen(expanded)}
-            >
-              <div
-                style={{
-                  border: '1px solid var(--pf-t--global--border--color--default, #a2a9b4)',
-                  borderRadius: '8px',
-                  padding: '1.25rem 1.5rem',
-                }}
-              >
-                <Flex
-                  spaceItems={{ default: 'spaceItemsXl' }}
-                  alignItems={{ default: 'alignItemsStretch' }}
-                  flexWrap={{ default: 'wrap' }}
-                >
-                  <ConfigLinkCard
-                    to={`/projects/${projectName}/roles`}
-                    title="Roles"
-                    description="Create and view Nova AI PlatformRoles used by this console."
-                    icon={<KeyIcon />}
-                  />
-                  <ConfigLinkCard
-                    to={`/projects/${projectName}/permissions`}
-                    title="Permissions"
-                    description="Add users and groups to share access to your project."
-                    icon={<UsersIcon />}
-                  />
-                </Flex>
-              </div>
-            </ExpandableSection>
-          </StackItem>
-        ) : null}
         <StackItem>
           <Card>
             <CardTitle>Details</CardTitle>
@@ -238,6 +202,42 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ projectName, canManageRbac = 
             </CardBody>
           </Card>
         </StackItem>
+        {canManageRbac ? (
+          <StackItem>
+            <ExpandableSection
+              toggleText="Project configuration"
+              isExpanded={isConfigOpen}
+              onToggle={(_event, expanded) => setIsConfigOpen(expanded)}
+            >
+              <div
+                style={{
+                  border: '1px solid var(--pf-t--global--border--color--default, #a2a9b4)',
+                  borderRadius: '8px',
+                  padding: '1.25rem 1.5rem',
+                }}
+              >
+                <Flex
+                  spaceItems={{ default: 'spaceItemsXl' }}
+                  alignItems={{ default: 'alignItemsStretch' }}
+                  flexWrap={{ default: 'wrap' }}
+                >
+                  <ConfigLinkCard
+                    to={`/projects/${projectName}/roles`}
+                    title="Roles"
+                    description="Create and view Nova AI PlatformRoles used by this console."
+                    icon={<KeyIcon />}
+                  />
+                  <ConfigLinkCard
+                    to={`/projects/${projectName}/permissions`}
+                    title="Permissions"
+                    description="Add users and groups to share access to your project."
+                    icon={<UsersIcon />}
+                  />
+                </Flex>
+              </div>
+            </ExpandableSection>
+          </StackItem>
+        ) : null}
       </Stack>
     </PageSection>
   );

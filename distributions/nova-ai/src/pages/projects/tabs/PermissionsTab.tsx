@@ -27,7 +27,7 @@ import {
 } from '../../../auth/platformApi';
 import type { PlatformRoleBindingKind, PlatformRoleKind } from '../../../auth/types';
 import { K8sApiError } from '../../../cluster/k8sClient';
-import { consoleScopeLabels } from '../../../consoleScope';
+import { consoleScopeLabels, GRANTED_IN_PROJECT_ANNOTATION } from '../../../consoleScope';
 
 type PermissionsTabProps = {
   projectName: string;
@@ -71,11 +71,8 @@ const appliesToProject = (binding: PlatformRoleBindingKind, projectName: string)
   return target === 'Cluster' || (target === 'Namespaces' && namespaces.includes(projectName));
 };
 
-const canRevokeInProject = (binding: PlatformRoleBindingKind, projectName: string): boolean => {
-  const target = binding.spec.kubernetes?.target ?? 'None';
-  const namespaces = binding.spec.kubernetes?.namespaces ?? [];
-  return target === 'Namespaces' && namespaces.length === 1 && namespaces[0] === projectName;
-};
+const canRevokeInProject = (binding: PlatformRoleBindingKind, projectName: string): boolean =>
+  binding.metadata.annotations?.[GRANTED_IN_PROJECT_ANNOTATION] === projectName;
 
 const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
   const [roles, setRoles] = React.useState<PlatformRoleKind[]>([]);
@@ -140,6 +137,9 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
         metadata: {
           name: dns1123Name(`${projectName}-${name}-${roleName}`),
           labels: consoleScopeLabels(),
+          annotations: {
+            [GRANTED_IN_PROJECT_ANNOTATION]: projectName,
+          },
         },
         spec: {
           platformRoleRef: { name: roleName },
@@ -326,7 +326,6 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
                   {canRevokeInProject(binding, projectName) ? (
                     <Button
                       variant="link"
-                      isDanger
                       isDisabled={isSaving}
                       onClick={() => void revoke(binding.metadata.name)}
                     >
