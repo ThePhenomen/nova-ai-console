@@ -39,6 +39,20 @@ export type PlatformUserKind = {
   };
 };
 
+export type PlatformGroupKind = {
+  apiVersion?: string;
+  kind?: string;
+  metadata: K8sObjectMeta;
+  spec?: {
+    type?: string;
+    members?: string[];
+    groupName?: string;
+  };
+  status?: {
+    starvaultGroupId?: string;
+  };
+};
+
 export type PlatformRoleKind = {
   apiVersion: string;
   kind: string;

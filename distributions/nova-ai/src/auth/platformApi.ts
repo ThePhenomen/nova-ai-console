@@ -2,6 +2,7 @@ import { k8sRequest } from '../cluster/k8sClient';
 import type { K8sList } from '../cluster/types';
 import { hasConsoleScope } from '../consoleScope';
 import type {
+  PlatformGroupKind,
   PlatformRoleBindingKind,
   PlatformRoleKind,
   PlatformUserKind,
@@ -16,6 +17,9 @@ export const listPlatformRoles = (): Promise<PlatformRoleKind[]> =>
 
 export const listPlatformUsers = (): Promise<PlatformUserKind[]> =>
   k8sRequest<K8sList<PlatformUserKind>>(`${PLATFORM_AUTH_API}/users`).then((list) => list.items);
+
+export const listPlatformGroups = (): Promise<PlatformGroupKind[]> =>
+  k8sRequest<K8sList<PlatformGroupKind>>(`${PLATFORM_AUTH_API}/groups`).then((list) => list.items);
 
 export const listPlatformRoleBindings = (): Promise<PlatformRoleBindingKind[]> =>
   k8sRequest<K8sList<PlatformRoleBindingKind>>(

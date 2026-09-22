@@ -104,7 +104,8 @@ const ProjectsList: React.FC = () => {
           {session.user.sub && session.user.sub !== (access.username ?? session.user.username)
             ? ` (entity ${session.user.sub})`
             : ''}
-          . Bind this User CR in a PlatformRoleBinding to nova-ai-admin or nova-ai-developer
+          . Bind this User CR, or a Group that lists it in spec.members, in a
+          PlatformRoleBinding to nova-ai-admin or nova-ai-developer
           (kubernetes.target: Cluster for admin, Namespaces for a project).
         </Alert>
       ) : null}

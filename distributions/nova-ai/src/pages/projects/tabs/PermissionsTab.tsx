@@ -225,7 +225,7 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
             id="grant-subject-name"
             value={subjectName}
             onChange={(_event, value) => setSubjectName(value)}
-            placeholder="alice"
+            placeholder={subjectKind === 'Group' ? 'platform-admins' : 'alice'}
             isRequired
           />
         </FormGroup>

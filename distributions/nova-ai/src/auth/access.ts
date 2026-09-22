@@ -3,6 +3,7 @@ import type {
   ConsolePersona,
   PlatformAccess,
   PlatformBindingSubject,
+  PlatformGroupKind,
   PlatformRoleBindingKind,
   PlatformRoleKind,
   PlatformUserKind,
@@ -55,9 +56,10 @@ const addIdentity = (bucket: Set<string>, value?: string): void => {
   }
 };
 
-export const enrichUserFromPlatformUsers = (
+export const enrichUserFromPlatformDirectory = (
   user: AuthUser,
   platformUsers: PlatformUserKind[],
+  platformGroups: PlatformGroupKind[],
 ): AuthUser => {
   const aliases = new Set<string>(user.aliases ?? []);
   addIdentity(aliases, user.sub);
@@ -65,7 +67,7 @@ export const enrichUserFromPlatformUsers = (
   addIdentity(aliases, user.email);
   user.groups.forEach((group) => addIdentity(aliases, group));
 
-  const matched = platformUsers.find((platformUser) => {
+  const matchedUser = platformUsers.find((platformUser) => {
     const candidates = [
       platformUser.metadata.name,
       platformUser.spec?.username,
@@ -86,27 +88,78 @@ export const enrichUserFromPlatformUsers = (
     });
   });
 
-  if (matched) {
-    addIdentity(aliases, matched.metadata.name);
-    addIdentity(aliases, matched.spec?.username);
-    addIdentity(aliases, matched.status?.username);
-    addIdentity(aliases, matched.status?.entityId);
-    addIdentity(aliases, matched.status?.email);
-    addIdentity(aliases, matched.status?.displayName);
-    (matched.status?.groups ?? []).forEach((group) => addIdentity(aliases, group));
+  const userCrNames = new Set<string>();
+  if (matchedUser) {
+    addIdentity(aliases, matchedUser.metadata.name);
+    addIdentity(aliases, matchedUser.spec?.username);
+    addIdentity(aliases, matchedUser.status?.username);
+    addIdentity(aliases, matchedUser.status?.entityId);
+    addIdentity(aliases, matchedUser.status?.email);
+    addIdentity(aliases, matchedUser.status?.displayName);
+    (matchedUser.status?.groups ?? []).forEach((group) => addIdentity(aliases, group));
+    userCrNames.add(matchedUser.metadata.name);
+    if (matchedUser.spec?.username) {
+      userCrNames.add(matchedUser.spec.username);
+    }
+    if (matchedUser.status?.username) {
+      userCrNames.add(matchedUser.status.username);
+    }
   }
 
+  const groupNames: string[] = [...user.groups, ...(matchedUser?.status?.groups ?? [])];
+  platformGroups.forEach((group) => {
+    const memberMatch = (group.spec?.members ?? []).some((member) => {
+      if (!member) {
+        return false;
+      }
+      const tail = identityTail(member);
+      return (
+        userCrNames.has(member) ||
+        aliases.has(member) ||
+        aliases.has(member.toLowerCase()) ||
+        aliases.has(tail) ||
+        aliases.has(tail.toLowerCase())
+      );
+    });
+    const nameMatch = [
+      group.metadata.name,
+      group.spec?.groupName,
+      group.status?.starvaultGroupId,
+    ].some((candidate) => {
+      if (!candidate) {
+        return false;
+      }
+      const tail = identityTail(candidate);
+      return (
+        aliases.has(candidate) ||
+        aliases.has(candidate.toLowerCase()) ||
+        aliases.has(tail) ||
+        aliases.has(tail.toLowerCase())
+      );
+    });
+    if (!memberMatch && !nameMatch) {
+      return;
+    }
+    addIdentity(aliases, group.metadata.name);
+    addIdentity(aliases, group.spec?.groupName);
+    addIdentity(aliases, group.status?.starvaultGroupId);
+    groupNames.push(group.metadata.name);
+    if (group.spec?.groupName) {
+      groupNames.push(group.spec.groupName);
+    }
+  });
+
   const displayName =
-    matched?.status?.username ||
-    matched?.spec?.username ||
-    matched?.metadata.name ||
+    matchedUser?.status?.username ||
+    matchedUser?.spec?.username ||
+    matchedUser?.metadata.name ||
     user.username;
 
   return {
     ...user,
     username: displayName,
-    email: user.email ?? matched?.status?.email,
-    groups: unique([...user.groups, ...(matched?.status?.groups ?? [])]),
+    email: user.email ?? matchedUser?.status?.email,
+    groups: unique(groupNames),
     aliases: [...aliases],
   };
 };
@@ -122,19 +175,22 @@ const userIdentities = (user: AuthUser): Set<string> => {
 };
 
 const subjectMatchesUser = (subject: PlatformBindingSubject, user: AuthUser): boolean => {
+  if (subject.kind === 'ServiceAccount') {
+    return false;
+  }
   const identities = userIdentities(user);
-  const candidates = [subject.name, subject.identity, identityTail(subject.name)];
-  if (subject.identity) {
-    candidates.push(identityTail(subject.identity));
-  }
-  if (subject.kind === 'User' || subject.kind === 'Group' || !subject.kind) {
-    return candidates.some(
-      (candidate) =>
-        Boolean(candidate) &&
-        (identities.has(candidate) || identities.has(candidate.toLowerCase())),
+  const values = [subject.name, subject.identity].filter(
+    (value): value is string => typeof value === 'string' && value.trim() !== '',
+  );
+  return values.some((value) => {
+    const tail = identityTail(value);
+    return (
+      identities.has(value) ||
+      identities.has(value.toLowerCase()) ||
+      identities.has(tail) ||
+      identities.has(tail.toLowerCase())
     );
-  }
-  return false;
+  });
 };
 
 export const bindingMatchesUser = (
@@ -228,12 +284,11 @@ export type AccessInput = {
  * Console authorization follows nova-auth-operator: PlatformRole is WHAT,
  * PlatformRoleBinding is WHO and WHERE (`kubernetes.target`).
  *
- * Personas come from catalog roles (`nova-ai-admin|developer`) or
- * `nova-ai.io/console-persona`. Only objects labeled `nova-ai-console` are
- * used. Cluster and None targets apply cluster-wide; Namespaces targets are
- * per project. Per-project service tabs come from a role labeled
- * `nova-ai.io/console-service=<id>` (or `oidc-auth-<id>` on a non-persona
- * role) bound with `target: Namespaces`.
+ * WHO is a User CR and/or a Group CR. The signed-in OIDC subject (StarVault
+ * entity id in `sub`) is resolved to a User CR, then to Groups via
+ * `Group.spec.members`, `User.status.groups`, and the token `groups` claim.
+ * A binding matches if any subject User/Group name or resolved identity
+ * equals one of those aliases.
  */
 export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
   const rolesByName = new Map(input.roles.map((role) => [role.metadata.name, role]));
