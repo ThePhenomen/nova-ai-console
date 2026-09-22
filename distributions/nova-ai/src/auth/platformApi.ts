@@ -26,6 +26,12 @@ export const listPlatformRoleBindings = (): Promise<PlatformRoleBindingKind[]> =
     `${PLATFORM_AUTH_API}/platformrolebindings`,
   ).then((list) => list.items);
 
+export const createPlatformRole = (role: PlatformRoleKind): Promise<PlatformRoleKind> =>
+  k8sRequest<PlatformRoleKind>(`${PLATFORM_AUTH_API}/platformroles`, {
+    method: 'POST',
+    body: role,
+  });
+
 export const createPlatformRoleBinding = (
   binding: PlatformRoleBindingKind,
 ): Promise<PlatformRoleBindingKind> =>
