@@ -1,0 +1,45 @@
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRole
+metadata:
+  name: nova-ai-admin
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/console-persona: admin
+spec:
+  kubernetes:
+    clusterRoleSelectors:
+      - matchLabels:
+          nova-platform.io/aggregate-to-admin: "true"
+  oidc:
+    applications:
+      - oidc-kubernetes-client
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRole
+metadata:
+  name: nova-ai-developer
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/console-persona: developer
+spec:
+  kubernetes:
+    clusterRoleSelectors:
+      - matchLabels:
+          rbac.authorization.k8s.io/aggregate-to-view: "true"
+      - matchLabels:
+          nova-platform.io/aggregate-to-developer: "true"
+  oidc:
+    applications:
+      - oidc-kubernetes-client
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRole
+metadata:
+  name: nova-ai-mlflow
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/console-service: mlflow
+spec:
+  oidc:
+    applications:
+      - oidc-auth-mlflow

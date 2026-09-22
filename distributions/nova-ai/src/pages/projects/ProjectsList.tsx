@@ -19,6 +19,8 @@ import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import ClusterConnectionModal from '../../cluster/ClusterConnectionModal';
 import { K8sApiError } from '../../cluster/k8sClient';
 import { useClusterConnection } from '../../cluster/useClusterConnection';
+import { useAuthSession } from '../../auth/useAuthSession';
+import { usePlatformAccess } from '../../auth/usePlatformAccess';
 import CreateProjectModal from './CreateProjectModal';
 import { listProjects, type ProjectSummary } from './projectApi';
 
@@ -35,6 +37,8 @@ const formatQuota = (project: ProjectSummary): string => {
 const ProjectsList: React.FC = () => {
   const navigate = useNavigate();
   const [connection] = useClusterConnection();
+  const [session] = useAuthSession();
+  const { access, error: accessError, isLoading: isAccessLoading } = usePlatformAccess();
   const [projects, setProjects] = React.useState<ProjectSummary[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -63,6 +67,9 @@ const ProjectsList: React.FC = () => {
     void loadProjects();
   }, [loadProjects]);
 
+  const visibleProjects = projects.filter((project) => access.canViewProject(project.name));
+  const showCreate = access.canCreateProjects;
+
   if (!connection) {
     return (
       <PageSection>
@@ -85,13 +92,32 @@ const ProjectsList: React.FC = () => {
 
   return (
     <PageSection>
+      {access.source === 'bootstrap' ? (
+        <Alert variant="info" isInline title="Using kubeconfig credentials" style={{ marginBottom: '1rem' }}>
+          Sign in with StarVault to apply PlatformRoleBindings. Until then the console treats this
+          connection as cluster admin.
+        </Alert>
+      ) : null}
+      {session && access.source === 'oidc' && access.clusterPersona === 'none' && visibleProjects.length === 0 ? (
+        <Alert variant="info" isInline title="No platform role assigned" style={{ marginBottom: '1rem' }}>
+          Signed in as {session.user.username}, but no PlatformRoleBinding grants project access
+          yet.
+        </Alert>
+      ) : null}
+      {accessError ? (
+        <Alert variant="warning" isInline title="Could not load platform roles" style={{ marginBottom: '1rem' }}>
+          {accessError}
+        </Alert>
+      ) : null}
       <Toolbar>
         <ToolbarContent>
-          <ToolbarItem>
-            <Button variant="primary" onClick={() => setIsCreateOpen(true)}>
-              Create project
-            </Button>
-          </ToolbarItem>
+          {showCreate ? (
+            <ToolbarItem>
+              <Button variant="primary" onClick={() => setIsCreateOpen(true)}>
+                Create project
+              </Button>
+            </ToolbarItem>
+          ) : null}
           <ToolbarItem>
             <Button variant="secondary" onClick={() => void loadProjects()} isDisabled={isLoading}>
               Refresh
@@ -104,26 +130,30 @@ const ProjectsList: React.FC = () => {
           {error}
         </Alert>
       ) : null}
-      {isLoading ? (
+      {isLoading || isAccessLoading ? (
         <Bullseye>
           <Spinner />
         </Bullseye>
       ) : null}
-      {!isLoading && projects.length === 0 && !error ? (
+      {!isLoading && !isAccessLoading && visibleProjects.length === 0 && !error ? (
         <EmptyState headingLevel="h2" titleText="No projects" icon={CubesIcon}>
           <EmptyStateBody>
-            Create a project to get a namespace with resource quotas.
+            {showCreate
+              ? 'Create a project to get a namespace with resource quotas.'
+              : 'No projects are visible for your PlatformRoleBinding.'}
           </EmptyStateBody>
-          <EmptyStateFooter>
-            <EmptyStateActions>
-              <Button variant="primary" onClick={() => setIsCreateOpen(true)}>
-                Create project
-              </Button>
-            </EmptyStateActions>
-          </EmptyStateFooter>
+          {showCreate ? (
+            <EmptyStateFooter>
+              <EmptyStateActions>
+                <Button variant="primary" onClick={() => setIsCreateOpen(true)}>
+                  Create project
+                </Button>
+              </EmptyStateActions>
+            </EmptyStateFooter>
+          ) : null}
         </EmptyState>
       ) : null}
-      {!isLoading && projects.length > 0 ? (
+      {!isLoading && !isAccessLoading && visibleProjects.length > 0 ? (
         <Table aria-label="Projects" variant="compact">
           <Thead>
             <Tr>
@@ -134,7 +164,7 @@ const ProjectsList: React.FC = () => {
             </Tr>
           </Thead>
           <Tbody>
-            {projects.map((project) => (
+            {visibleProjects.map((project) => (
               <Tr
                 key={project.name}
                 isClickable

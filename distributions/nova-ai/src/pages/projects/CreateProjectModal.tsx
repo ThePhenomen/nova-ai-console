@@ -2,6 +2,8 @@ import React from 'react';
 import {
   Alert,
   Button,
+  Flex,
+  FlexItem,
   Form,
   FormGroup,
   FormHelperText,
@@ -14,6 +16,7 @@ import {
   TextArea,
   TextInput,
 } from '@patternfly/react-core';
+import { MinusCircleIcon, PlusCircleIcon } from '@patternfly/react-icons';
 import { K8sApiError } from '../../cluster/k8sClient';
 import { createProject, NAMESPACE_NAME_PATTERN, type ProjectQuotaInput } from './projectApi';
 
@@ -28,7 +31,10 @@ const emptyQuota: ProjectQuotaInput = {
   memoryRequest: '4Gi',
   memoryLimit: '8Gi',
   pods: '20',
+  accelerators: [{ resource: '', quantity: '' }],
 };
+
+type QuotaScalar = Exclude<keyof ProjectQuotaInput, 'accelerators'>;
 
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose, onCreated }) => {
   const [name, setName] = React.useState('');
@@ -37,8 +43,31 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose, onCrea
   const [error, setError] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
 
-  const updateQuota = (field: keyof ProjectQuotaInput, value: string) => {
+  const updateQuota = (field: QuotaScalar, value: string) => {
     setQuota((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateAccelerator = (index: number, field: 'resource' | 'quantity', value: string) => {
+    setQuota((current) => ({
+      ...current,
+      accelerators: current.accelerators.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, [field]: value } : row,
+      ),
+    }));
+  };
+
+  const addAccelerator = () => {
+    setQuota((current) => ({
+      ...current,
+      accelerators: [...current.accelerators, { resource: '', quantity: '' }],
+    }));
+  };
+
+  const removeAccelerator = (index: number) => {
+    setQuota((current) => ({
+      ...current,
+      accelerators: current.accelerators.filter((_row, rowIndex) => rowIndex !== index),
+    }));
   };
 
   const submit = async (event: React.FormEvent) => {
@@ -71,7 +100,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose, onCrea
     <Modal isOpen variant="medium" onClose={onClose} aria-label="Create project">
       <ModalHeader
         title="Create project"
-        description="A project is a Kubernetes namespace with a resource quota and optional description."
+        description="A project is a Kubernetes namespace labeled nova-ai.io/console=nova-ai-console, with a resource quota and optional description."
       />
       <ModalBody>
         <Form id="create-project-form" onSubmit={submit}>
@@ -141,6 +170,59 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose, onCrea
               onChange={(_event, value) => updateQuota('pods', value)}
               placeholder="20"
             />
+          </FormGroup>
+          <FormGroup label="Accelerators" fieldId="quota-accelerators">
+            <FormHelperText>
+              <HelperText>
+                <HelperTextItem>
+                  Any Kubernetes extended resource name, for example nvidia.com/gpu or
+                  vgpu/device.
+                </HelperTextItem>
+              </HelperText>
+            </FormHelperText>
+            {quota.accelerators.map((row, index) => (
+              <Flex
+                key={`accelerator-${index}`}
+                alignItems={{ default: 'alignItemsFlexEnd' }}
+                spaceItems={{ default: 'spaceItemsSm' }}
+                style={{ marginTop: '0.5rem' }}
+              >
+                <FlexItem grow={{ default: 'grow' }}>
+                  <TextInput
+                    id={`quota-accelerator-resource-${index}`}
+                    value={row.resource}
+                    onChange={(_event, value) => updateAccelerator(index, 'resource', value)}
+                    placeholder="nvidia.com/gpu"
+                    aria-label={`Accelerator resource ${index + 1}`}
+                  />
+                </FlexItem>
+                <FlexItem>
+                  <TextInput
+                    id={`quota-accelerator-quantity-${index}`}
+                    value={row.quantity}
+                    onChange={(_event, value) => updateAccelerator(index, 'quantity', value)}
+                    placeholder="1"
+                    aria-label={`Accelerator quantity ${index + 1}`}
+                  />
+                </FlexItem>
+                <FlexItem>
+                  <Button
+                    variant="plain"
+                    icon={<MinusCircleIcon />}
+                    onClick={() => removeAccelerator(index)}
+                    aria-label={`Remove accelerator ${index + 1}`}
+                  />
+                </FlexItem>
+              </Flex>
+            ))}
+            <Button
+              variant="link"
+              icon={<PlusCircleIcon />}
+              onClick={addAccelerator}
+              style={{ paddingLeft: 0, marginTop: '0.25rem' }}
+            >
+              Add accelerator
+            </Button>
           </FormGroup>
         </Form>
       </ModalBody>

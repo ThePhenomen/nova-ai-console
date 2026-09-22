@@ -5,6 +5,8 @@ const { URL } = require('url');
 
 const PROXY_PREFIX = '/k8s-proxy';
 const SESSION_PATH = '/k8s-session';
+const OIDC_FORWARD_PATH = '/oidc-forward';
+const OIDC_PKCE_PATH = '/oidc-pkce';
 
 /** @type {Map<string, { apiServer: string, token?: string, cert?: Buffer, key?: Buffer, ca?: Buffer }>} */
 const sessions = new Map();
@@ -111,6 +113,121 @@ const handleSession = (req, res) => {
     });
 };
 
+const readRawBody = (req) =>
+  new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+
+const handleOidcPkce = (req, res) => {
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { message: 'Method not allowed' });
+    return;
+  }
+  readJsonBody(req)
+    .then((body) => {
+      const verifier =
+        typeof body.verifier === 'string' && body.verifier.length >= 43
+          ? body.verifier
+          : crypto.randomBytes(32).toString('base64url');
+      const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+      sendJson(res, 200, { verifier, challenge });
+    })
+    .catch((error) => {
+      sendJson(res, 400, {
+        message: error instanceof Error ? error.message : 'Invalid PKCE payload',
+      });
+    });
+};
+
+/**
+ * Browser cannot call StarVault (CORS, self-signed TLS), so discovery and the
+ * token exchange are forwarded with `X-Target-Url`. Authorization is a top-level
+ * redirect and does not use this proxy.
+ */
+const handleOidcForward = (req, res) => {
+  const targetHeader = req.headers['x-target-url'];
+  if (typeof targetHeader !== 'string' || targetHeader.trim() === '') {
+    sendJson(res, 400, { message: 'X-Target-Url is required' });
+    return;
+  }
+
+  let target;
+  try {
+    target = new URL(targetHeader);
+  } catch {
+    sendJson(res, 400, { message: 'Invalid X-Target-Url' });
+    return;
+  }
+
+  if (target.protocol !== 'https:' && target.protocol !== 'http:') {
+    sendJson(res, 400, { message: 'OIDC URL must use http or https' });
+    return;
+  }
+
+  const method = req.method || 'GET';
+  const hasBody = method !== 'GET' && method !== 'HEAD';
+  const headers = {
+    accept: req.headers.accept || 'application/json',
+  };
+  if (req.headers['content-type']) {
+    headers['content-type'] = req.headers['content-type'];
+  }
+
+  const sendUpstream = (bodyBuf) => {
+    if (hasBody && bodyBuf && bodyBuf.length > 0) {
+      headers['content-length'] = String(bodyBuf.length);
+    }
+    const isHttps = target.protocol === 'https:';
+    const lib = isHttps ? https : http;
+    const proxyReq = lib.request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port || (isHttps ? 443 : 80),
+        path: `${target.pathname}${target.search}`,
+        method,
+        headers,
+        rejectUnauthorized: false,
+      },
+      (proxyRes) => {
+        res.statusCode = proxyRes.statusCode || 502;
+        const contentType = proxyRes.headers['content-type'];
+        if (contentType) {
+          res.setHeader('Content-Type', contentType);
+        }
+        proxyRes.pipe(res);
+      },
+    );
+    proxyReq.on('error', (error) => {
+      if (res.headersSent) {
+        res.end();
+        return;
+      }
+      sendJson(res, 502, { message: error instanceof Error ? error.message : String(error) });
+    });
+    if (hasBody && bodyBuf && bodyBuf.length > 0) {
+      proxyReq.end(bodyBuf);
+    } else {
+      proxyReq.end();
+    }
+  };
+
+  if (hasBody) {
+    readRawBody(req)
+      .then((bodyBuf) => sendUpstream(bodyBuf))
+      .catch((error) => {
+        sendJson(res, 400, {
+          message: error instanceof Error ? error.message : 'Invalid OIDC request body',
+        });
+      });
+    return;
+  }
+  sendUpstream();
+};
+
 /**
  * Browser cannot speak Kubernetes mTLS or skip CORS, so the webpack dev server
  * holds credentials in a short-lived session and forwards `/k8s-proxy/*`.
@@ -121,6 +238,16 @@ const k8sProxyMiddleware = (req, res, next) => {
 
   if (pathWithQuery === SESSION_PATH) {
     handleSession(req, res);
+    return;
+  }
+
+  if (pathWithQuery === OIDC_PKCE_PATH) {
+    handleOidcPkce(req, res);
+    return;
+  }
+
+  if (pathWithQuery === OIDC_FORWARD_PATH) {
+    handleOidcForward(req, res);
     return;
   }
 

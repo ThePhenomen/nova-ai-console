@@ -25,6 +25,13 @@ const extensions: Extension[] = [
   {
     type: 'app.route',
     properties: {
+      path: '/auth/callback',
+      component: () => import('./auth/AuthCallback'),
+    },
+  } satisfies RouteExtension,
+  {
+    type: 'app.route',
+    properties: {
       path: '/',
       component: () => import('./pages/RedirectToProjects'),
     },
@@ -35,6 +42,14 @@ const extensions: Extension[] = [
       id: 'cluster-connection',
       position: 'trailing',
       component: () => import('./cluster/ClusterToolbarItem'),
+    },
+  } satisfies MastheadToolbarItemExtension,
+  {
+    type: 'app.masthead/toolbar-item',
+    properties: {
+      id: 'oidc-session',
+      position: 'trailing',
+      component: () => import('./auth/AuthToolbarItem'),
     },
   } satisfies MastheadToolbarItemExtension,
 ];

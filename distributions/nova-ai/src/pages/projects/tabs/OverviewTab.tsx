@@ -17,6 +17,7 @@ import {
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import { K8sApiError } from '../../../cluster/k8sClient';
 import type { NamespaceKind, ResourceQuotaKind } from '../../../cluster/types';
+import { hasConsoleScope } from '../../../consoleScope';
 import { getNamespace, getProjectDescription, listNamespaceQuotas } from '../projectApi';
 
 type OverviewTabProps = {
@@ -40,8 +41,14 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ projectName }) => {
           listNamespaceQuotas(projectName),
         ]);
         if (!cancelled) {
-          setNamespace(nextNamespace);
-          setQuotas(nextQuotas);
+          if (!hasConsoleScope(nextNamespace.metadata.labels)) {
+            setError('This namespace is not a Nova AI Console project.');
+            setNamespace(null);
+            setQuotas([]);
+          } else {
+            setNamespace(nextNamespace);
+            setQuotas(nextQuotas);
+          }
         }
       } catch (err) {
         if (!cancelled) {

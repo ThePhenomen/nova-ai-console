@@ -1,17 +1,16 @@
 import { k8sRequest } from '../../cluster/k8sClient';
-import type {
-  K8sList,
-  NamespaceKind,
-  ResourceQuotaKind,
-  RoleBindingKind,
-  RoleKind,
-} from '../../cluster/types';
+import type { K8sList, NamespaceKind, ResourceQuotaKind } from '../../cluster/types';
+import { consoleScopeLabels, hasConsoleScope } from '../../consoleScope';
 
 export const PROJECT_DESCRIPTION_ANNOTATION = 'nova-ai.io/description';
-export const PROJECT_LABEL = 'nova-ai.io/project';
 export const PROJECT_QUOTA_NAME = 'nova-ai-quota';
 
 const SYSTEM_NAMESPACE_PREFIXES = ['kube-', 'openshift-'];
+
+export type AcceleratorQuota = {
+  resource: string;
+  quantity: string;
+};
 
 export type ProjectQuotaInput = {
   cpuRequest: string;
@@ -19,6 +18,7 @@ export type ProjectQuotaInput = {
   memoryRequest: string;
   memoryLimit: string;
   pods: string;
+  accelerators: AcceleratorQuota[];
 };
 
 export type CreateProjectInput = {
@@ -60,6 +60,13 @@ const quotaHardFromInput = (quota: ProjectQuotaInput): Record<string, string> =>
   if (quota.pods.trim()) {
     hard.pods = quota.pods.trim();
   }
+  quota.accelerators.forEach((accelerator) => {
+    const resource = accelerator.resource.trim();
+    const quantity = accelerator.quantity.trim();
+    if (resource && quantity) {
+      hard[resource] = quantity;
+    }
+  });
   return hard;
 };
 
@@ -84,7 +91,11 @@ export const listProjects = async (): Promise<ProjectSummary[]> => {
   });
 
   return namespaces.items
-    .filter((namespace) => !isSystemNamespace(namespace.metadata.name))
+    .filter(
+      (namespace) =>
+        !isSystemNamespace(namespace.metadata.name) &&
+        hasConsoleScope(namespace.metadata.labels),
+    )
     .map((namespace) => ({
       name: namespace.metadata.name,
       description: getProjectDescription(namespace),
@@ -101,16 +112,6 @@ export const getNamespace = (name: string): Promise<NamespaceKind> =>
 export const listNamespaceQuotas = (name: string): Promise<ResourceQuotaKind[]> =>
   k8sRequest<K8sList<ResourceQuotaKind>>(
     `/api/v1/namespaces/${encodeURIComponent(name)}/resourcequotas`,
-  ).then((list) => list.items);
-
-export const listRoles = (namespace: string): Promise<RoleKind[]> =>
-  k8sRequest<K8sList<RoleKind>>(
-    `/apis/rbac.authorization.k8s.io/v1/namespaces/${encodeURIComponent(namespace)}/roles`,
-  ).then((list) => list.items);
-
-export const listRoleBindings = (namespace: string): Promise<RoleBindingKind[]> =>
-  k8sRequest<K8sList<RoleBindingKind>>(
-    `/apis/rbac.authorization.k8s.io/v1/namespaces/${encodeURIComponent(namespace)}/rolebindings`,
   ).then((list) => list.items);
 
 export const NAMESPACE_NAME_PATTERN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
@@ -135,7 +136,7 @@ export const createProject = async (input: CreateProjectInput): Promise<void> =>
       kind: 'Namespace',
       metadata: {
         name,
-        labels: { [PROJECT_LABEL]: 'true' },
+        labels: consoleScopeLabels(),
         annotations: input.description.trim()
           ? { [PROJECT_DESCRIPTION_ANNOTATION]: input.description.trim() }
           : undefined,
