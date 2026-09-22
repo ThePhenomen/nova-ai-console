@@ -70,6 +70,18 @@ type SortColumn = 'name' | 'status' | 'created';
 
 const SORT_COLUMNS: SortColumn[] = ['name', 'status', 'created'];
 
+const isRowActionClick = (event: React.KeyboardEvent | React.MouseEvent): boolean => {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  return Boolean(
+    target.closest(
+      'button, a, input, [role="menu"], [role="menuitem"], .pf-v6-c-menu, .pf-v6-c-menu-toggle, .pf-v6-c-dropdown',
+    ),
+  );
+};
+
 const compareProjects = (
   left: ProjectSummary,
   right: ProjectSummary,
@@ -319,14 +331,24 @@ const ProjectsList: React.FC = () => {
                 <Tr
                   key={project.name}
                   isClickable
-                  onRowClick={() => navigate(`/projects/${project.name}/overview`)}
+                  onRowClick={(event) => {
+                    if (isRowActionClick(event)) {
+                      return;
+                    }
+                    navigate(`/projects/${project.name}/overview`);
+                  }}
                 >
                   <Td dataLabel="Name">{project.name}</Td>
                   <Td dataLabel="Description">{project.description || '—'}</Td>
                   <Td dataLabel="Status">{project.phase}</Td>
                   <Td dataLabel="Resource quota">{formatQuota(project)}</Td>
                   <Td dataLabel="Created">{formatCreated(project.createdAt)}</Td>
-                  <Td isActionCell>
+                  <Td
+                    isActionCell
+                    onClick={(event) => event.stopPropagation()}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
                     {showCreate || canManageRbac ? (
                       <ActionsColumn
                         items={[
@@ -334,7 +356,8 @@ const ProjectsList: React.FC = () => {
                             title: 'Edit project',
                             isDisabled: !showCreate,
                             onClick: (event) => {
-                              event.stopPropagation();
+                              event?.preventDefault();
+                              event?.stopPropagation();
                               setEditProject(project);
                             },
                           },
@@ -342,7 +365,8 @@ const ProjectsList: React.FC = () => {
                             title: 'Edit permissions',
                             isDisabled: !canManageRbac,
                             onClick: (event) => {
-                              event.stopPropagation();
+                              event?.preventDefault();
+                              event?.stopPropagation();
                               navigate(`/projects/${project.name}/permissions`);
                             },
                           },
@@ -353,7 +377,8 @@ const ProjectsList: React.FC = () => {
                             title: 'Delete project',
                             isDisabled: !showCreate,
                             onClick: (event) => {
-                              event.stopPropagation();
+                              event?.preventDefault();
+                              event?.stopPropagation();
                               setDeleteTarget(project);
                             },
                           },
