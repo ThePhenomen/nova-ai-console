@@ -31,7 +31,6 @@ import {
   Tr,
   type ThProps,
 } from '@patternfly/react-table';
-import ClusterConnectionModal from '../../cluster/ClusterConnectionModal';
 import { K8sApiError } from '../../cluster/k8sClient';
 import { useClusterConnection } from '../../cluster/useClusterConnection';
 import { useAuthSession } from '../../auth/useAuthSession';
@@ -89,7 +88,7 @@ const compareProjects = (
 
 const ProjectsList: React.FC = () => {
   const navigate = useNavigate();
-  const [connection] = useClusterConnection();
+  const connection = useClusterConnection();
   const [session] = useAuthSession();
   const { access, error: accessError, isLoading: isAccessLoading } = usePlatformAccess();
   const [projects, setProjects] = React.useState<ProjectSummary[]>([]);
@@ -97,7 +96,6 @@ const ProjectsList: React.FC = () => {
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
-  const [isClusterOpen, setIsClusterOpen] = React.useState(false);
   const [editProject, setEditProject] = React.useState<ProjectSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<ProjectSummary | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
@@ -186,19 +184,11 @@ const ProjectsList: React.FC = () => {
   if (!connection) {
     return (
       <PageSection>
-        <EmptyState headingLevel="h2" titleText="Connect to a cluster" icon={CubesIcon}>
+        <EmptyState headingLevel="h2" titleText="Cluster kubeconfig is not configured" icon={CubesIcon}>
           <EmptyStateBody>
-            Specify the Kubernetes API server URL and credentials to create and view projects.
+            Set KUBECONFIG_BASE64 in the console .env file and restart npm run start:dev.
           </EmptyStateBody>
-          <EmptyStateFooter>
-            <EmptyStateActions>
-              <Button variant="primary" onClick={() => setIsClusterOpen(true)}>
-                Connect to cluster
-              </Button>
-            </EmptyStateActions>
-          </EmptyStateFooter>
         </EmptyState>
-        {isClusterOpen ? <ClusterConnectionModal onClose={() => setIsClusterOpen(false)} /> : null}
       </PageSection>
     );
   }

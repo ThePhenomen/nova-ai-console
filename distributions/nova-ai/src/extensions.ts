@@ -61,14 +61,6 @@ const extensions: Extension[] = [
   {
     type: 'app.masthead/toolbar-item',
     properties: {
-      id: 'cluster-connection',
-      position: 'trailing',
-      component: () => import('./cluster/ClusterToolbarItem'),
-    },
-  } satisfies MastheadToolbarItemExtension,
-  {
-    type: 'app.masthead/toolbar-item',
-    properties: {
       id: 'oidc-session',
       position: 'trailing',
       component: () => import('./auth/AuthToolbarItem'),

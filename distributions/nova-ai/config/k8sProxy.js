@@ -74,28 +74,12 @@ if (kubeconfigFromEnv?.apiServer && !envClusterSession) {
   );
 }
 
-const createSession = (body) => {
-  if (body.useEnv) {
-    if (!envClusterSession) {
-      throw new Error('KUBECONFIG_BASE64 is not set or is not a valid kubeconfig.');
-    }
-    const sessionId = crypto.randomUUID();
-    sessions.set(sessionId, envClusterSession);
-    return sessionId;
-  }
-  const apiServer = typeof body.apiServer === 'string' ? body.apiServer.trim() : '';
-  if (!apiServer) {
-    throw new Error('apiServer is required');
-  }
-  const token = typeof body.token === 'string' && body.token.trim() !== '' ? body.token.trim() : undefined;
-  const cert = decodePem(body.clientCertificateData);
-  const key = decodePem(body.clientKeyData);
-  const ca = decodePem(body.certificateAuthorityData);
-  if (!token && !(cert && key)) {
-    throw new Error('A bearer token or a client certificate and key is required');
+const createSession = () => {
+  if (!envClusterSession) {
+    throw new Error('KUBECONFIG_BASE64 is not set or is not a valid kubeconfig.');
   }
   const sessionId = crypto.randomUUID();
-  sessions.set(sessionId, { apiServer, token, cert, key, ca });
+  sessions.set(sessionId, envClusterSession);
   return sessionId;
 };
 
@@ -141,8 +125,8 @@ const handleSession = (req, res) => {
     return;
   }
   readJsonBody(req)
-    .then((body) => {
-      const sessionId = createSession(body);
+    .then(() => {
+      const sessionId = createSession();
       sendJson(res, 200, { sessionId });
     })
     .catch((error) => {

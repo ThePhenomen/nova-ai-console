@@ -24,7 +24,7 @@ export type PlatformAccessState = {
 
 export const usePlatformAccess = (): PlatformAccessState => {
   const [session] = useAuthSession();
-  const [connection] = useClusterConnection();
+  const connection = useClusterConnection();
   const [access, setAccess] = React.useState<PlatformAccess>(() =>
     session ? emptyAccess('oidc', session.user.username) : bootstrapAccess(),
   );

@@ -1,5 +1,5 @@
 import { getClusterConnection } from './connectionStore';
-import { hasClusterCredentials, type ClusterConnection, type K8sStatus } from './types';
+import { hasClusterCredentials, type K8sStatus } from './types';
 
 const PROXY_PREFIX = '/k8s-proxy';
 const SESSION_PATH = '/k8s-session';
@@ -41,31 +41,12 @@ const readErrorMessage = async (response: Response): Promise<string> => {
 type RequestOptions = {
   method?: string;
   body?: unknown;
-  connection?: ClusterConnection | null;
 };
 
 let activeSessionId: string | null = null;
-let activeSessionKey: string | null = null;
 
-const connectionKey = (connection: ClusterConnection): string =>
-  connection.useEnvKubeconfig
-    ? `env\0${connection.apiServer}`
-    : [
-        connection.apiServer,
-        connection.token ?? '',
-        connection.clientCertificateData ?? '',
-        connection.clientKeyData ?? '',
-        connection.certificateAuthorityData ?? '',
-      ].join('\0');
-
-const sessionBody = (connection: ClusterConnection): unknown =>
-  connection.useEnvKubeconfig
-    ? { apiServer: connection.apiServer, useEnv: true }
-    : connection;
-
-const ensureSession = async (connection: ClusterConnection): Promise<string> => {
-  const key = connectionKey(connection);
-  if (activeSessionId && activeSessionKey === key) {
+const ensureSession = async (): Promise<string> => {
+  if (activeSessionId) {
     return activeSessionId;
   }
   let response: Response;
@@ -73,7 +54,7 @@ const ensureSession = async (connection: ClusterConnection): Promise<string> => 
     response = await fetch(SESSION_PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(sessionBody(connection)),
+      body: JSON.stringify({ useEnv: true }),
       cache: 'no-store',
     });
   } catch {
@@ -95,17 +76,18 @@ const ensureSession = async (connection: ClusterConnection): Promise<string> => 
     throw new K8sApiError('Cluster proxy did not return a session.');
   }
   activeSessionId = sessionId;
-  activeSessionKey = key;
   return sessionId;
 };
 
 export const k8sRequest = async <T>(path: string, options: RequestOptions = {}): Promise<T> => {
-  const connection = options.connection ?? getClusterConnection();
+  const connection = getClusterConnection();
   if (!connection || !hasClusterCredentials(connection)) {
-    throw new K8sApiError('Not connected to a cluster');
+    throw new K8sApiError(
+      'KUBECONFIG_BASE64 is not set. Add it to .env and restart the Nova AI Console.',
+    );
   }
 
-  const sessionId = await ensureSession(connection);
+  const sessionId = await ensureSession();
   const headers: Record<string, string> = {
     Accept: 'application/json',
     'X-Cluster-Session': sessionId,
@@ -132,7 +114,6 @@ export const k8sRequest = async <T>(path: string, options: RequestOptions = {}):
 
   if (response.status === 401) {
     activeSessionId = null;
-    activeSessionKey = null;
   }
 
   if (!response.ok) {
@@ -145,24 +126,4 @@ export const k8sRequest = async <T>(path: string, options: RequestOptions = {}):
   }
 
   return (await response.json()) as T;
-};
-
-export const testClusterConnection = async (connection: ClusterConnection): Promise<void> => {
-  activeSessionId = null;
-  activeSessionKey = null;
-  await k8sRequest('/api/v1', { connection });
-};
-
-export const clearClusterSession = (): void => {
-  const sessionId = activeSessionId;
-  activeSessionId = null;
-  activeSessionKey = null;
-  if (!sessionId) {
-    return;
-  }
-  void fetch(SESSION_PATH, {
-    method: 'DELETE',
-    headers: { 'X-Cluster-Session': sessionId },
-    cache: 'no-store',
-  });
 };
