@@ -10,7 +10,7 @@ if (typeof window !== 'undefined') {
   }
 }
 
-export const getClusterConnection = (): ClusterConnection | null => {
+const CLUSTER_CONNECTION: ClusterConnection | null = (() => {
   const apiServer =
     typeof process.env.KUBECONFIG_API_SERVER === 'string'
       ? process.env.KUBECONFIG_API_SERVER.trim().replace(/\/$/, '')
@@ -19,6 +19,8 @@ export const getClusterConnection = (): ClusterConnection | null => {
     return null;
   }
   return { apiServer };
-};
+})();
+
+export const getClusterConnection = (): ClusterConnection | null => CLUSTER_CONNECTION;
 
 export const subscribeClusterConnection = (): (() => void) => () => undefined;
