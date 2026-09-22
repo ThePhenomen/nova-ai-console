@@ -62,18 +62,6 @@ module.exports = {
             message:
               "Importing from '#~/__mocks__/third_party/mlmd/' is restricted to '#~/__mocks__/mlmd/'.",
           },
-          {
-            group: ['@patternfly/react-core'],
-            importNames: ['Select'],
-            message:
-              "Import 'SimpleSelect' from '@nova-ai/ui-core/components/SimpleSelect', 'MultiSelection' from '@nova-ai/ui-core/components/MultiSelection', or 'TypeaheadSelect' from '@nova-ai/ui-core/components/TypeaheadSelect' instead.",
-          },
-          {
-            group: ['@patternfly/react-core'],
-            importNames: ['NumberInput'],
-            message:
-              "Import 'NumberInputWrapper' from '@nova-ai/ui-core/components/NumberInputWrapper' instead.",
-          },
         ],
       },
     ],

@@ -1,30 +1,27 @@
 import type { Extension } from '@nova-ai/plugin-core';
 import type {
+  HrefNavItemExtension,
+  MastheadToolbarItemExtension,
   RouteExtension,
-  TabRoutePageExtension,
-  TabRouteTabExtension,
 } from '@nova-ai/plugin-core/extension-points';
 
 const extensions: Extension[] = [
   {
-    type: 'app.tab-route/page',
+    type: 'app.navigation/href',
     properties: {
       id: 'projects',
       title: 'Projects',
       href: '/projects',
       path: '/projects/*',
-      alwaysShowTabBar: true,
     },
-  } satisfies TabRoutePageExtension,
+  } satisfies HrefNavItemExtension,
   {
-    type: 'app.tab-route/tab',
+    type: 'app.route',
     properties: {
-      pageId: 'projects',
-      id: 'overview',
-      title: 'Overview',
-      component: () => import('./pages/ProjectsTab'),
+      path: '/projects/*',
+      component: () => import('./pages/projects/ProjectsApp'),
     },
-  } satisfies TabRouteTabExtension,
+  } satisfies RouteExtension,
   {
     type: 'app.route',
     properties: {
@@ -32,6 +29,14 @@ const extensions: Extension[] = [
       component: () => import('./pages/RedirectToProjects'),
     },
   } satisfies RouteExtension,
+  {
+    type: 'app.masthead/toolbar-item',
+    properties: {
+      id: 'cluster-connection',
+      position: 'trailing',
+      component: () => import('./cluster/ClusterToolbarItem'),
+    },
+  } satisfies MastheadToolbarItemExtension,
 ];
 
 export default extensions;

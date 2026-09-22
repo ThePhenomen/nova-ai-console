@@ -40,7 +40,5 @@ module.exports = {
     'react/prop-types': 'off',
     'react-hooks/rules-of-hooks': 'error',
     'react-hooks/exhaustive-deps': 'error',
-    '@nova-ai/require-effect-timer-cleanup': 'error',
-    '@nova-ai/require-effect-listener-cleanup': 'error',
   },
 };
