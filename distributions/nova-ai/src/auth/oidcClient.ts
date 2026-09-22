@@ -29,7 +29,7 @@ export const formatOidcError = (raw: string): OidcError => {
   }
   if (text.includes('client failed to authenticate') || text.includes('invalid_client')) {
     return new OidcError(
-      'StarVault rejected the OIDC client. For a confidential client, paste the client secret from identity/oidc/client/<name>.',
+      'StarVault rejected the OIDC client. Set STARVAULT_OIDC_CLIENT_SECRET in the console .env for a confidential client.',
       'OIDC client was rejected',
     );
   }
@@ -47,7 +47,7 @@ export const formatOidcError = (raw: string): OidcError => {
   }
   if (text.includes('redirect_uri')) {
     return new OidcError(
-      'The redirect URI is not registered on the StarVault OIDC client. Add the URI shown in the sign-in dialog.',
+      'The redirect URI is not registered on the StarVault OIDC client. Set STARVAULT_OIDC_REDIRECT_URI in .env to a URI listed on the client.',
       'Redirect URI mismatch',
     );
   }
@@ -259,7 +259,7 @@ export const startOidcLogin = async (config: OidcConfig): Promise<void> => {
     verifier,
     state: randomUrl(16),
     nonce: randomUrl(16),
-    redirectUri: `${window.location.origin}/auth/callback`,
+    redirectUri: config.redirectUri?.trim() || `${window.location.origin}/auth/callback`,
     issuer,
     clientId,
     clientSecret: config.clientSecret?.trim() || undefined,

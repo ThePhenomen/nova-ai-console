@@ -1,6 +1,7 @@
 const path = require('path');
 const webpack = require('webpack');
 const { merge } = require('webpack-merge');
+require('./loadEnv');
 const createWebpackCommon = require('../../base/config/webpack.common.js');
 const GenerateDistributionExtensionsPlugin = require('../../base/config/generateDistributionExtensionsPlugin');
 
@@ -17,8 +18,13 @@ module.exports = (overrides = {}) =>
     {
       plugins: [
         new webpack.DefinePlugin({
-          'process.env.PRODUCT_NAME': JSON.stringify('Nova AI'),
-          'process.env': '({})',
+          'process.env': JSON.stringify({
+            PRODUCT_NAME: 'Nova AI',
+            STARVAULT_OIDC_ISSUER: process.env.STARVAULT_OIDC_ISSUER || '',
+            STARVAULT_OIDC_CLIENT_ID: process.env.STARVAULT_OIDC_CLIENT_ID || '',
+            STARVAULT_OIDC_SCOPES: process.env.STARVAULT_OIDC_SCOPES || '',
+            STARVAULT_OIDC_REDIRECT_URI: process.env.STARVAULT_OIDC_REDIRECT_URI || '',
+          }),
         }),
         new GenerateDistributionExtensionsPlugin({
           configPath: path.resolve(__dirname, '../distribution.yaml'),

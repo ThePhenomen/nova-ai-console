@@ -3,33 +3,12 @@ import { Button, Label } from '@patternfly/react-core';
 import { UserIcon } from '@patternfly/react-icons';
 import { usePluginStore } from '@nova-ai/plugin-core';
 import { hasConsoleService } from './access';
+import { getEnvOidcConfig } from './envOidc';
 import OidcLoginModal from './OidcLoginModal';
-import { logoutOidc } from './oidcClient';
+import { getOidcConfig } from './oidcStore';
+import { logoutOidc, startOidcLogin } from './oidcClient';
 import { useAuthSession } from './useAuthSession';
 import { usePlatformAccess } from './usePlatformAccess';
-
-const personaColor = (persona: string): 'green' | 'blue' | 'grey' | 'orange' => {
-  if (persona === 'admin') {
-    return 'green';
-  }
-  if (persona === 'developer') {
-    return 'blue';
-  }
-  if (persona === 'viewer') {
-    return 'grey';
-  }
-  return 'orange';
-};
-
-const personaLabel = (source: string, persona: string): string => {
-  if (source === 'bootstrap') {
-    return 'admin (kubeconfig)';
-  }
-  if (persona === 'none') {
-    return 'no platform role';
-  }
-  return persona;
-};
 
 const AuthToolbarItem: React.FC = () => {
   const store = usePluginStore();
@@ -43,10 +22,23 @@ const AuthToolbarItem: React.FC = () => {
     });
   }, [access, store]);
 
+  const signIn = async () => {
+    const config = getEnvOidcConfig() ?? getOidcConfig();
+    if (!config) {
+      setIsOpen(true);
+      return;
+    }
+    try {
+      await startOidcLogin(config);
+    } catch {
+      setIsOpen(true);
+    }
+  };
+
   if (!session) {
     return (
       <>
-        <Button variant="plain" icon={<UserIcon />} onClick={() => setIsOpen(true)} aria-label="Sign in">
+        <Button variant="plain" icon={<UserIcon />} onClick={() => void signIn()} aria-label="Sign in">
           <Label color="orange" isCompact>
             Sign in
           </Label>
@@ -58,8 +50,8 @@ const AuthToolbarItem: React.FC = () => {
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-      <Label color={personaColor(access.clusterPersona)} isCompact icon={<UserIcon />}>
-        {access.username ?? session.user.username} · {personaLabel(access.source, access.clusterPersona)}
+      <Label color="grey" isCompact icon={<UserIcon />}>
+        {access.username ?? session.user.username}
       </Label>
       <Button variant="link" isInline onClick={() => logoutOidc()}>
         Sign out

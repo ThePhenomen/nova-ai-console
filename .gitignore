@@ -10,6 +10,8 @@
 Thumbs.db
 .envrc
 .env*.local
+/.env
+/distributions/nova-ai/.env
 
 node_modules
 logs

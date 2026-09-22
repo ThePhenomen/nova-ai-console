@@ -7,6 +7,7 @@ export type OidcConfig = {
   clientId: string;
   clientSecret?: string;
   scopes?: string;
+  redirectUri?: string;
 };
 
 export type AuthUser = {

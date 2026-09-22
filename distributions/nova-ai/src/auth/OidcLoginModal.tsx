@@ -13,6 +13,7 @@ import {
   ModalHeader,
   TextInput,
 } from '@patternfly/react-core';
+import { getEnvOidcConfig } from './envOidc';
 import { OidcError, startOidcLogin } from './oidcClient';
 import { useOidcConfig } from './useOidcConfig';
 
@@ -33,15 +34,23 @@ const parseIssuer = (value: string): string | null => {
 };
 
 const OidcLoginModal: React.FC<OidcLoginModalProps> = ({ onClose }) => {
+  const envConfig = getEnvOidcConfig();
   const [config, setConfig] = useOidcConfig();
-  const [issuer, setIssuer] = React.useState(config?.issuer ?? '');
-  const [clientId, setClientId] = React.useState(config?.clientId ?? 'nova-ai-console');
+  const [issuer, setIssuer] = React.useState(config?.issuer ?? envConfig?.issuer ?? '');
+  const [clientId, setClientId] = React.useState(
+    config?.clientId ?? envConfig?.clientId ?? 'nova-ai-console',
+  );
   const [clientSecret, setClientSecret] = React.useState(config?.clientSecret ?? '');
-  const [scopes, setScopes] = React.useState(config?.scopes ?? 'openid');
+  const [scopes, setScopes] = React.useState(
+    config?.scopes ?? envConfig?.scopes ?? 'openid name email',
+  );
   const [error, setError] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
+  const envLocked = Boolean(envConfig);
   const redirectUri =
-    typeof window === 'undefined' ? '/auth/callback' : `${window.location.origin}/auth/callback`;
+    config?.redirectUri ||
+    envConfig?.redirectUri ||
+    (typeof window === 'undefined' ? '/auth/callback' : `${window.location.origin}/auth/callback`);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -57,6 +66,7 @@ const OidcLoginModal: React.FC<OidcLoginModalProps> = ({ onClose }) => {
       clientId: nextClientId,
       clientSecret: clientSecret.trim() || undefined,
       scopes: scopes.trim() || 'openid',
+      redirectUri,
     };
     setConfig(next);
     setIsSaving(true);
@@ -72,7 +82,11 @@ const OidcLoginModal: React.FC<OidcLoginModalProps> = ({ onClose }) => {
     <Modal isOpen variant="medium" onClose={onClose} aria-label="Sign in with StarVault">
       <ModalHeader
         title="Sign in with StarVault"
-        description="Nova AI Console uses the StarVault OIDC provider. Register this redirect URI on the OIDC client."
+        description={
+          envLocked
+            ? 'OIDC settings are loaded from the console .env file.'
+            : 'Nova AI Console uses the StarVault OIDC provider. Set values in .env or enter them here.'
+        }
       />
       <ModalBody>
         <Form id="oidc-login-form" onSubmit={submit}>
@@ -88,12 +102,12 @@ const OidcLoginModal: React.FC<OidcLoginModalProps> = ({ onClose }) => {
               onChange={(_event, value) => setIssuer(value)}
               placeholder="https://starvault.example.com/v1/identity/oidc/provider/nova"
               isRequired
+              isDisabled={envLocked}
             />
             <FormHelperText>
               <HelperText>
                 <HelperTextItem>
-                  StarVault identity OIDC provider issuer. Discovery is fetched through the
-                  console proxy.
+                  STARVAULT_OIDC_ISSUER. Discovery is fetched through the console proxy.
                 </HelperTextItem>
               </HelperText>
             </FormHelperText>
@@ -105,32 +119,35 @@ const OidcLoginModal: React.FC<OidcLoginModalProps> = ({ onClose }) => {
               onChange={(_event, value) => setClientId(value)}
               placeholder="nova-ai-console"
               isRequired
+              isDisabled={envLocked}
             />
           </FormGroup>
-          <FormGroup label="Client secret" fieldId="oidc-client-secret">
-            <TextInput
-              id="oidc-client-secret"
-              type="password"
-              value={clientSecret}
-              onChange={(_event, value) => setClientSecret(value)}
-              autoComplete="off"
-            />
-            <FormHelperText>
-              <HelperText>
-                <HelperTextItem>
-                  Required for confidential StarVault OIDC clients. Read it from the client in
-                  StarVault; without it token exchange returns &quot;client failed to
-                  authenticate&quot;.
-                </HelperTextItem>
-              </HelperText>
-            </FormHelperText>
-          </FormGroup>
+          {envLocked ? null : (
+            <FormGroup label="Client secret" fieldId="oidc-client-secret">
+              <TextInput
+                id="oidc-client-secret"
+                type="password"
+                value={clientSecret}
+                onChange={(_event, value) => setClientSecret(value)}
+                autoComplete="off"
+              />
+              <FormHelperText>
+                <HelperText>
+                  <HelperTextItem>
+                    Prefer STARVAULT_OIDC_CLIENT_SECRET in .env so the secret stays on the
+                    webpack proxy. Required for confidential StarVault clients.
+                  </HelperTextItem>
+                </HelperText>
+              </FormHelperText>
+            </FormGroup>
+          )}
           <FormGroup label="Scopes" fieldId="oidc-scopes">
             <TextInput
               id="oidc-scopes"
               value={scopes}
               onChange={(_event, value) => setScopes(value)}
-              placeholder="openid"
+              placeholder="openid name email"
+              isDisabled={envLocked}
             />
           </FormGroup>
           <FormGroup label="Redirect URI" fieldId="oidc-redirect-uri">

@@ -31,3 +31,16 @@ spec:
   oidc:
     applications:
       - nova-ai-console
+---
+# Experiments sidebar is gated on this service label, not on nova-ai-developer.
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRole
+metadata:
+  name: nova-ai-mlflow
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/console-service: mlflow
+spec:
+  oidc:
+    applications:
+      - nova-ai-console

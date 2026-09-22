@@ -1,0 +1,37 @@
+# WHERE lives on PlatformRoleBinding, not on PlatformRole or User.
+# target: Cluster → console lists every nova-ai-console project (nova-ai-admin).
+# target: Namespaces → only the listed projects (nova-ai-developer).
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-developer-ml-team
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-developer
+  subjects:
+    - kind: Group
+      name: REPLACE_WITH_GROUP_CR_NAME
+  kubernetes:
+    target: Namespaces
+    namespaces:
+      - ml-team
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-mlflow-ml-team
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-mlflow
+  subjects:
+    - kind: Group
+      name: REPLACE_WITH_GROUP_CR_NAME
+  kubernetes:
+    target: Namespaces
+    namespaces:
+      - ml-team

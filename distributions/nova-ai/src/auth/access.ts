@@ -248,17 +248,17 @@ const projectAccessFrom = (persona: ConsolePersona, services: string[]): Project
   canView: PERSONA_RANK[persona] >= PERSONA_RANK.viewer,
   canEdit: PERSONA_RANK[persona] >= PERSONA_RANK.developer,
   canManageRbac: persona === 'admin',
-  services: persona === 'admin' ? unique(['*', ...services]) : unique(services),
+  services: unique(services),
 });
 
 export const bootstrapAccess = (username?: string): PlatformAccess => {
-  const project = projectAccessFrom('admin', ['*']);
+  const project = projectAccessFrom('admin', []);
   return {
     source: 'bootstrap',
     clusterPersona: 'admin',
     canCreateProjects: true,
     username,
-    services: ['*'],
+    services: [],
     forProject: () => project,
     canViewProject: () => true,
   };
@@ -348,7 +348,7 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
     clusterPersona,
     canCreateProjects: clusterPersona === 'admin',
     username: input.user.username,
-    services: clusterPersona === 'admin' ? unique(['*', ...grantedServices]) : grantedServices,
+    services: grantedServices,
     forProject: (projectName: string) => {
       const persona = maxPersona(clusterPersona, projectPersonas.get(projectName) ?? 'none');
       if (persona === 'none' && !seesAllProjects && !visibleProjects.has(projectName)) {
@@ -383,10 +383,7 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
 };
 
 export const hasProjectService = (access: ProjectAccess, service: string): boolean =>
-  access.persona === 'admin' || access.services.includes('*') || access.services.includes(service);
+  access.services.includes(service);
 
 export const hasConsoleService = (access: PlatformAccess, service: string): boolean =>
-  access.source === 'bootstrap' ||
-  access.clusterPersona === 'admin' ||
-  access.services.includes('*') ||
   access.services.includes(service);

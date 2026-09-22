@@ -1,6 +1,7 @@
 const path = require('path');
 const { merge } = require('webpack-merge');
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
+require('./loadEnv');
 const webpackCommon = require('./webpack.common.js');
 const k8sProxyMiddleware = require('./k8sProxy');
 

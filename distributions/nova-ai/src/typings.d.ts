@@ -17,3 +17,13 @@ declare module '*.gif' {
   const value: string;
   export default value;
 }
+
+declare namespace NodeJS {
+  interface ProcessEnv {
+    PRODUCT_NAME?: string;
+    STARVAULT_OIDC_ISSUER?: string;
+    STARVAULT_OIDC_CLIENT_ID?: string;
+    STARVAULT_OIDC_SCOPES?: string;
+    STARVAULT_OIDC_REDIRECT_URI?: string;
+  }
+}

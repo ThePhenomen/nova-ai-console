@@ -2,6 +2,7 @@ const http = require('http');
 const https = require('https');
 const crypto = require('crypto');
 const { URL } = require('url');
+require('./loadEnv');
 
 const PROXY_PREFIX = '/k8s-proxy';
 const SESSION_PATH = '/k8s-session';
@@ -121,6 +122,31 @@ const readRawBody = (req) =>
     req.on('error', reject);
   });
 
+const applyStarvaultClientSecret = (headers, bodyBuf) => {
+  const secret = process.env.STARVAULT_OIDC_CLIENT_SECRET;
+  const clientId = process.env.STARVAULT_OIDC_CLIENT_ID;
+  if (!secret || !bodyBuf || bodyBuf.length === 0) {
+    return bodyBuf;
+  }
+  const contentType = String(headers['content-type'] || '');
+  if (!contentType.includes('application/x-www-form-urlencoded')) {
+    return bodyBuf;
+  }
+  const params = new URLSearchParams(bodyBuf.toString('utf8'));
+  if (!params.has('grant_type')) {
+    return bodyBuf;
+  }
+  if (!params.has('client_secret')) {
+    params.set('client_secret', secret);
+  }
+  if (clientId && !headers.authorization) {
+    headers.authorization = `Basic ${Buffer.from(`${clientId}:${secret}`).toString('base64')}`;
+  }
+  const nextBody = Buffer.from(params.toString(), 'utf8');
+  headers['content-length'] = String(nextBody.length);
+  return nextBody;
+};
+
 const handleOidcPkce = (req, res) => {
   if (req.method !== 'POST') {
     sendJson(res, 405, { message: 'Method not allowed' });
@@ -180,8 +206,9 @@ const handleOidcForward = (req, res) => {
   }
 
   const sendUpstream = (bodyBuf) => {
-    if (hasBody && bodyBuf && bodyBuf.length > 0) {
-      headers['content-length'] = String(bodyBuf.length);
+    const payload = applyStarvaultClientSecret(headers, bodyBuf);
+    if (hasBody && payload && payload.length > 0) {
+      headers['content-length'] = String(payload.length);
     }
     const isHttps = target.protocol === 'https:';
     const lib = isHttps ? https : http;
@@ -211,8 +238,8 @@ const handleOidcForward = (req, res) => {
       }
       sendJson(res, 502, { message: error instanceof Error ? error.message : String(error) });
     });
-    if (hasBody && bodyBuf && bodyBuf.length > 0) {
-      proxyReq.end(bodyBuf);
+    if (hasBody && payload && payload.length > 0) {
+      proxyReq.end(payload);
     } else {
       proxyReq.end();
     }

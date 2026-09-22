@@ -1,3 +1,4 @@
+import { getEnvOidcConfig } from './envOidc';
 import type { OidcConfig } from './types';
 
 export const OIDC_CONFIG_STORAGE_KEY = 'nova-ai.oidc-config';
@@ -33,13 +34,31 @@ const readStoredConfig = (): OidcConfig | null => {
       clientId,
       clientSecret: asNonEmptyString(record.clientSecret),
       scopes: asNonEmptyString(record.scopes),
+      redirectUri: asNonEmptyString(record.redirectUri),
     };
   } catch {
     return null;
   }
 };
 
-let snapshot: OidcConfig | null = typeof window === 'undefined' ? null : readStoredConfig();
+export const resolveOidcConfig = (stored?: OidcConfig | null): OidcConfig | null => {
+  const env = getEnvOidcConfig();
+  const fromStore = stored === undefined ? (typeof window === 'undefined' ? null : readStoredConfig()) : stored;
+  const issuer = env?.issuer || fromStore?.issuer;
+  const clientId = env?.clientId || fromStore?.clientId;
+  if (!issuer || !clientId) {
+    return null;
+  }
+  return {
+    issuer,
+    clientId,
+    clientSecret: fromStore?.clientSecret,
+    scopes: env?.scopes || fromStore?.scopes,
+    redirectUri: env?.redirectUri || fromStore?.redirectUri,
+  };
+};
+
+let snapshot: OidcConfig | null = typeof window === 'undefined' ? null : resolveOidcConfig();
 
 const emit = (): void => {
   listeners.forEach((listener) => listener());
@@ -56,16 +75,26 @@ export const subscribeOidcConfig = (listener: () => void): (() => void) => {
 
 export const setOidcConfig = (next: OidcConfig | null): void => {
   snapshot = next
-    ? {
+    ? resolveOidcConfig({
         issuer: next.issuer.trim().replace(/\/$/, ''),
         clientId: next.clientId.trim(),
         clientSecret: asNonEmptyString(next.clientSecret),
         scopes: asNonEmptyString(next.scopes),
-      }
-    : null;
+        redirectUri: asNonEmptyString(next.redirectUri),
+      })
+    : resolveOidcConfig(null);
   try {
-    if (snapshot) {
-      localStorage.setItem(OIDC_CONFIG_STORAGE_KEY, JSON.stringify(snapshot));
+    if (next) {
+      localStorage.setItem(
+        OIDC_CONFIG_STORAGE_KEY,
+        JSON.stringify({
+          issuer: next.issuer.trim().replace(/\/$/, ''),
+          clientId: next.clientId.trim(),
+          clientSecret: asNonEmptyString(next.clientSecret),
+          scopes: asNonEmptyString(next.scopes),
+          redirectUri: asNonEmptyString(next.redirectUri),
+        }),
+      );
     } else {
       localStorage.removeItem(OIDC_CONFIG_STORAGE_KEY);
     }
