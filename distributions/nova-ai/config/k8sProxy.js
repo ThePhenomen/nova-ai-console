@@ -175,6 +175,9 @@ const handleOidcForward = (req, res) => {
   if (req.headers['content-type']) {
     headers['content-type'] = req.headers['content-type'];
   }
+  if (req.headers.authorization) {
+    headers.authorization = req.headers.authorization;
+  }
 
   const sendUpstream = (bodyBuf) => {
     if (hasBody && bodyBuf && bodyBuf.length > 0) {

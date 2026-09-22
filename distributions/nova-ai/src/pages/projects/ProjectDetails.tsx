@@ -11,7 +11,6 @@ import {
   TabTitleText,
 } from '@patternfly/react-core';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { hasProjectService } from '../../auth/access';
 import { usePlatformAccess } from '../../auth/usePlatformAccess';
 import OverviewTab from './tabs/OverviewTab';
 import PermissionsTab from './tabs/PermissionsTab';
@@ -23,7 +22,6 @@ export const PROJECT_TABS = [
   { id: 'workbench', title: 'Workbench' },
   { id: 'pipelines', title: 'Pipelines' },
   { id: 'deployments', title: 'Deployments' },
-  { id: 'mlflow', title: 'MLflow', service: 'mlflow' },
   { id: 'roles', title: 'Roles', adminOnly: true },
   { id: 'permissions', title: 'Permissions', adminOnly: true },
 ] as const;
@@ -60,9 +58,6 @@ const ProjectDetails: React.FC = () => {
   const visibleTabs = PROJECT_TABS.filter((item) => {
     if ('adminOnly' in item && item.adminOnly) {
       return projectAccess.canManageRbac;
-    }
-    if ('service' in item && item.service) {
-      return hasProjectService(projectAccess, item.service);
     }
     return projectAccess.canView;
   });
@@ -125,12 +120,6 @@ const ProjectDetails: React.FC = () => {
         <PlaceholderTab
           title="Deployments"
           description="Model deployments in this project will appear here."
-        />
-      ) : null}
-      {activeTab === 'mlflow' ? (
-        <PlaceholderTab
-          title="MLflow"
-          description="This tab is shown because a PlatformRole labeled nova-ai.io/console-service=mlflow is bound to you in this project."
         />
       ) : null}
       {activeTab === 'roles' ? <RolesTab projectName={projectName} /> : null}

@@ -5,6 +5,7 @@ export type ConsolePersona = 'none' | 'viewer' | 'developer' | 'admin';
 export type OidcConfig = {
   issuer: string;
   clientId: string;
+  clientSecret?: string;
   scopes?: string;
 };
 
@@ -92,6 +93,7 @@ export type PlatformAccess = {
   clusterPersona: ConsolePersona;
   canCreateProjects: boolean;
   username?: string;
+  services: string[];
   forProject: (projectName: string) => ProjectAccess;
   canViewProject: (projectName: string) => boolean;
 };

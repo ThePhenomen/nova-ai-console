@@ -1,6 +1,8 @@
 import React from 'react';
 import { Button, Label } from '@patternfly/react-core';
 import { UserIcon } from '@patternfly/react-icons';
+import { usePluginStore } from '@nova-ai/plugin-core';
+import { hasConsoleService } from './access';
 import OidcLoginModal from './OidcLoginModal';
 import { logoutOidc } from './oidcClient';
 import { useAuthSession } from './useAuthSession';
@@ -30,9 +32,16 @@ const personaLabel = (source: string, persona: string): string => {
 };
 
 const AuthToolbarItem: React.FC = () => {
+  const store = usePluginStore();
   const [session] = useAuthSession();
   const { access } = usePlatformAccess();
   const [isOpen, setIsOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    store.setFeatureFlags({
+      'mlflow-experiments': hasConsoleService(access, 'mlflow'),
+    });
+  }, [access, store]);
 
   if (!session) {
     return (

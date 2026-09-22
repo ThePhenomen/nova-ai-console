@@ -24,6 +24,7 @@ type PkceHandshake = {
   redirectUri: string;
   issuer: string;
   clientId: string;
+  clientSecret?: string;
 };
 
 const randomUrl = (bytes: number): string => {
@@ -70,6 +71,14 @@ const readErrorMessage = async (response: Response): Promise<string> => {
       }
       if (typeof record.message === 'string') {
         return record.message;
+      }
+      if (Array.isArray(record.errors)) {
+        const details = record.errors.filter(
+          (item): item is string => typeof item === 'string' && item.trim() !== '',
+        );
+        if (details.length > 0) {
+          return details.join('; ');
+        }
       }
     }
   } catch {
@@ -203,6 +212,7 @@ export const startOidcLogin = async (config: OidcConfig): Promise<void> => {
     redirectUri: `${window.location.origin}/auth/callback`,
     issuer,
     clientId,
+    clientSecret: config.clientSecret?.trim() || undefined,
   };
   sessionStorage.setItem(PKCE_STORAGE_KEY, JSON.stringify(handshake));
 
@@ -235,6 +245,7 @@ const readHandshake = (): PkceHandshake => {
     redirectUri: typeof record.redirectUri === 'string' ? record.redirectUri : '',
     issuer: typeof record.issuer === 'string' ? record.issuer : '',
     clientId: typeof record.clientId === 'string' ? record.clientId : '',
+    clientSecret: typeof record.clientSecret === 'string' ? record.clientSecret : undefined,
   };
   if (
     !handshake.verifier ||
@@ -273,9 +284,16 @@ export const completeOidcLogin = async (callbackUrl: string): Promise<AuthSessio
     client_id: handshake.clientId,
     code_verifier: handshake.verifier,
   });
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+  };
+  if (handshake.clientSecret) {
+    body.set('client_secret', handshake.clientSecret);
+    headers.Authorization = `Basic ${btoa(`${handshake.clientId}:${handshake.clientSecret}`)}`;
+  }
   const response = await oidcForward(discovery.token_endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers,
     body: body.toString(),
   });
   if (!response.ok) {

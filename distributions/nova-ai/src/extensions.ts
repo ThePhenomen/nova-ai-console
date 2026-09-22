@@ -16,10 +16,32 @@ const extensions: Extension[] = [
     },
   } satisfies HrefNavItemExtension,
   {
+    type: 'app.navigation/href',
+    properties: {
+      id: 'experiments',
+      title: 'Experiments',
+      href: '/experiments',
+      path: '/experiments',
+    },
+    flags: {
+      required: ['mlflow-experiments'],
+    },
+  } satisfies HrefNavItemExtension,
+  {
     type: 'app.route',
     properties: {
       path: '/projects/*',
       component: () => import('./pages/projects/ProjectsApp'),
+    },
+  } satisfies RouteExtension,
+  {
+    type: 'app.route',
+    properties: {
+      path: '/experiments',
+      component: () => import('./pages/experiments/Experiments'),
+    },
+    flags: {
+      required: ['mlflow-experiments'],
     },
   } satisfies RouteExtension,
   {

@@ -31,6 +31,7 @@ const readStoredConfig = (): OidcConfig | null => {
     return {
       issuer,
       clientId,
+      clientSecret: asNonEmptyString(record.clientSecret),
       scopes: asNonEmptyString(record.scopes),
     };
   } catch {
@@ -58,6 +59,7 @@ export const setOidcConfig = (next: OidcConfig | null): void => {
     ? {
         issuer: next.issuer.trim().replace(/\/$/, ''),
         clientId: next.clientId.trim(),
+        clientSecret: asNonEmptyString(next.clientSecret),
         scopes: asNonEmptyString(next.scopes),
       }
     : null;

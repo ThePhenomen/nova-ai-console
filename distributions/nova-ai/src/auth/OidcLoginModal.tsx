@@ -36,6 +36,7 @@ const OidcLoginModal: React.FC<OidcLoginModalProps> = ({ onClose }) => {
   const [config, setConfig] = useOidcConfig();
   const [issuer, setIssuer] = React.useState(config?.issuer ?? '');
   const [clientId, setClientId] = React.useState(config?.clientId ?? 'nova-ai-console');
+  const [clientSecret, setClientSecret] = React.useState(config?.clientSecret ?? '');
   const [scopes, setScopes] = React.useState(config?.scopes ?? 'openid');
   const [error, setError] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -54,6 +55,7 @@ const OidcLoginModal: React.FC<OidcLoginModalProps> = ({ onClose }) => {
     const next = {
       issuer: nextIssuer,
       clientId: nextClientId,
+      clientSecret: clientSecret.trim() || undefined,
       scopes: scopes.trim() || 'openid',
     };
     setConfig(next);
@@ -104,6 +106,24 @@ const OidcLoginModal: React.FC<OidcLoginModalProps> = ({ onClose }) => {
               placeholder="nova-ai-console"
               isRequired
             />
+          </FormGroup>
+          <FormGroup label="Client secret" fieldId="oidc-client-secret">
+            <TextInput
+              id="oidc-client-secret"
+              type="password"
+              value={clientSecret}
+              onChange={(_event, value) => setClientSecret(value)}
+              autoComplete="off"
+            />
+            <FormHelperText>
+              <HelperText>
+                <HelperTextItem>
+                  Required for confidential StarVault OIDC clients. Read it from the client in
+                  StarVault; without it token exchange returns &quot;client failed to
+                  authenticate&quot;.
+                </HelperTextItem>
+              </HelperText>
+            </FormHelperText>
           </FormGroup>
           <FormGroup label="Scopes" fieldId="oidc-scopes">
             <TextInput

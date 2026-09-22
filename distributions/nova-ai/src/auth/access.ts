@@ -141,6 +141,7 @@ export const bootstrapAccess = (username?: string): PlatformAccess => {
     clusterPersona: 'admin',
     canCreateProjects: true,
     username,
+    services: ['*'],
     forProject: () => project,
     canViewProject: () => true,
   };
@@ -151,6 +152,7 @@ export const emptyAccess = (source: PlatformAccess['source'], username?: string)
   clusterPersona: 'none',
   canCreateProjects: false,
   username,
+  services: [],
   forProject: () => emptyProjectAccess(),
   canViewProject: () => false,
 });
@@ -220,11 +222,17 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
 
   const seesAllProjects = PERSONA_RANK[clusterPersona] >= PERSONA_RANK.viewer;
 
+  const grantedServices = unique([
+    ...clusterServices,
+    ...[...projectServices.values()].flat(),
+  ]);
+
   return {
     source: 'oidc',
     clusterPersona,
     canCreateProjects: clusterPersona === 'admin',
     username: input.user.username,
+    services: clusterPersona === 'admin' ? unique(['*', ...grantedServices]) : grantedServices,
     forProject: (projectName: string) => {
       const persona = maxPersona(clusterPersona, projectPersonas.get(projectName) ?? 'none');
       if (persona === 'none' && !seesAllProjects && !visibleProjects.has(projectName)) {
@@ -260,3 +268,9 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
 
 export const hasProjectService = (access: ProjectAccess, service: string): boolean =>
   access.persona === 'admin' || access.services.includes('*') || access.services.includes(service);
+
+export const hasConsoleService = (access: PlatformAccess, service: string): boolean =>
+  access.source === 'bootstrap' ||
+  access.clusterPersona === 'admin' ||
+  access.services.includes('*') ||
+  access.services.includes(service);
