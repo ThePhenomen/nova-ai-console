@@ -13,9 +13,9 @@ import {
   TextInput,
 } from '@patternfly/react-core';
 import { parseKubeconfig, normalizeToken } from './connectionStore';
-import { K8sApiError, testClusterConnection } from './k8sClient';
+import { clearClusterSession, K8sApiError, testClusterConnection } from './k8sClient';
+import { hasClusterCredentials, type ClusterConnection } from './types';
 import { useClusterConnection } from './useClusterConnection';
-import type { ClusterConnection } from './types';
 
 type AuthMode = 'token' | 'kubeconfig';
 
@@ -23,26 +23,54 @@ type ClusterConnectionModalProps = {
   onClose: () => void;
 };
 
+const parseApiServer = (value: string): string | null => {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return null;
+    }
+    return value.replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+};
+
 const ClusterConnectionModal: React.FC<ClusterConnectionModalProps> = ({ onClose }) => {
   const [connection, setConnection] = useClusterConnection();
-  const [authMode, setAuthMode] = React.useState<AuthMode>('token');
+  const [authMode, setAuthMode] = React.useState<AuthMode>(
+    connection?.clientCertificateData ? 'kubeconfig' : 'token',
+  );
   const [apiServer, setApiServer] = React.useState(connection?.apiServer ?? '');
   const [token, setToken] = React.useState(connection?.token ?? '');
   const [kubeconfig, setKubeconfig] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
 
-  const applyKubeconfig = (): ClusterConnection | null => {
+  const connectionFromKubeconfig = (): ClusterConnection | null => {
     const parsed = parseKubeconfig(kubeconfig);
-    if (!parsed.apiServer || !parsed.token) {
+    if (!parsed.apiServer) {
+      setError('Kubeconfig must include a cluster server URL.');
+      return null;
+    }
+    const server = parseApiServer(parsed.apiServer);
+    if (!server) {
+      setError('Cluster server URL in kubeconfig is not valid.');
+      return null;
+    }
+    const next: ClusterConnection = {
+      apiServer: server,
+      token: parsed.token,
+      clientCertificateData: parsed.clientCertificateData,
+      clientKeyData: parsed.clientKeyData,
+      certificateAuthorityData: parsed.certificateAuthorityData,
+    };
+    if (!hasClusterCredentials(next)) {
       setError(
-        'Kubeconfig must include a cluster server URL and a user token. Client certificates and exec plugins are not supported.',
+        'Kubeconfig must include a user token or client-certificate-data and client-key-data. Exec plugins are not supported.',
       );
       return null;
     }
-    setApiServer(parsed.apiServer);
-    setToken(parsed.token);
-    return { apiServer: parsed.apiServer, token: parsed.token };
+    return next;
   };
 
   const connect = async (event: React.FormEvent) => {
@@ -51,28 +79,18 @@ const ClusterConnectionModal: React.FC<ClusterConnectionModalProps> = ({ onClose
 
     let next: ClusterConnection | null = null;
     if (authMode === 'kubeconfig') {
-      next = applyKubeconfig();
+      next = connectionFromKubeconfig();
       if (!next) {
         return;
       }
     } else {
-      const trimmedServer = apiServer.trim();
+      const server = parseApiServer(apiServer.trim());
       const normalized = normalizeToken(token);
-      if (trimmedServer === '' || normalized === '') {
+      if (!server || normalized === '') {
         setError('API server URL and bearer token are required.');
         return;
       }
-      try {
-        const parsed = new URL(trimmedServer);
-        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-          setError('API server URL must start with https:// or http://');
-          return;
-        }
-      } catch {
-        setError('API server URL is not valid.');
-        return;
-      }
-      next = { apiServer: trimmedServer.replace(/\/$/, ''), token: normalized };
+      next = { apiServer: server, token: normalized };
     }
 
     setIsSaving(true);
@@ -88,6 +106,7 @@ const ClusterConnectionModal: React.FC<ClusterConnectionModalProps> = ({ onClose
   };
 
   const disconnect = () => {
+    clearClusterSession();
     setConnection(null);
     setToken('');
     onClose();
@@ -148,7 +167,7 @@ const ClusterConnectionModal: React.FC<ClusterConnectionModalProps> = ({ onClose
                 id="cluster-kubeconfig"
                 value={kubeconfig}
                 onChange={(_event, value) => setKubeconfig(value)}
-                placeholder="Paste a kubeconfig that contains server and token"
+                placeholder="Paste a kubeconfig with a token or client certificate"
                 rows={10}
                 isRequired
               />

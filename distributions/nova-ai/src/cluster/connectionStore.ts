@@ -1,8 +1,16 @@
-import type { ClusterConnection } from './types';
+import { hasClusterCredentials, type ClusterConnection } from './types';
 
 export const CLUSTER_CONNECTION_STORAGE_KEY = 'nova-ai.cluster-connection';
 
 const listeners = new Set<() => void>();
+
+const asNonEmptyString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+};
 
 const readStoredConnection = (): ClusterConnection | null => {
   try {
@@ -11,19 +19,22 @@ const readStoredConnection = (): ClusterConnection | null => {
       return null;
     }
     const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      typeof (parsed as ClusterConnection).apiServer !== 'string' ||
-      typeof (parsed as ClusterConnection).token !== 'string'
-    ) {
+    if (typeof parsed !== 'object' || parsed === null) {
       return null;
     }
-    const { apiServer, token } = parsed as ClusterConnection;
-    if (apiServer.trim() === '' || token.trim() === '') {
+    const record = parsed as Record<string, unknown>;
+    const apiServer = asNonEmptyString(record.apiServer);
+    if (!apiServer) {
       return null;
     }
-    return { apiServer: apiServer.trim(), token: token.trim() };
+    const connection: ClusterConnection = {
+      apiServer,
+      token: asNonEmptyString(record.token),
+      clientCertificateData: asNonEmptyString(record.clientCertificateData),
+      clientKeyData: asNonEmptyString(record.clientKeyData),
+      certificateAuthorityData: asNonEmptyString(record.certificateAuthorityData),
+    };
+    return hasClusterCredentials(connection) ? connection : null;
   } catch {
     return null;
   }
@@ -47,7 +58,13 @@ export const subscribeClusterConnection = (listener: () => void): (() => void) =
 
 export const setClusterConnection = (next: ClusterConnection | null): void => {
   snapshot = next
-    ? { apiServer: next.apiServer.trim(), token: next.token.trim() }
+    ? {
+        apiServer: next.apiServer.trim(),
+        token: asNonEmptyString(next.token),
+        clientCertificateData: asNonEmptyString(next.clientCertificateData),
+        clientKeyData: asNonEmptyString(next.clientKeyData),
+        certificateAuthorityData: asNonEmptyString(next.certificateAuthorityData),
+      }
     : null;
   try {
     if (snapshot) {
@@ -61,12 +78,40 @@ export const setClusterConnection = (next: ClusterConnection | null): void => {
   emit();
 };
 
+const kubeconfigScalar = (text: string, key: string): string | undefined => {
+  const match = text.match(new RegExp(`^\\s*${key}:\\s*(.*)$`, 'm'));
+  if (!match) {
+    return undefined;
+  }
+  const value = match[1].trim().replace(/^['"]|['"]$/g, '');
+  if (value === '|' || value === '|-' || value === '>' || value === '>-') {
+    const lines = text.slice(match.index ?? 0).split('\n').slice(1);
+    const block: string[] = [];
+    for (const line of lines) {
+      if (line.startsWith(' ') || line.startsWith('\t')) {
+        block.push(line.trim());
+        continue;
+      }
+      break;
+    }
+    const joined = block.join('').trim();
+    return joined === '' ? undefined : joined;
+  }
+  return value === '' ? undefined : value;
+};
+
 export const parseKubeconfig = (text: string): Partial<ClusterConnection> => {
-  const server = text.match(/^\s*server:\s*(\S+)/m)?.[1];
-  const token = text.match(/^\s*token:\s*(\S+)/m)?.[1];
+  const apiServer = kubeconfigScalar(text, 'server');
+  const token = kubeconfigScalar(text, 'token');
+  const clientCertificateData = kubeconfigScalar(text, 'client-certificate-data');
+  const clientKeyData = kubeconfigScalar(text, 'client-key-data');
+  const certificateAuthorityData = kubeconfigScalar(text, 'certificate-authority-data');
   return {
-    ...(server ? { apiServer: server.replace(/['"]/g, '') } : {}),
-    ...(token ? { token: token.replace(/['"]/g, '') } : {}),
+    ...(apiServer ? { apiServer: apiServer.replace(/\/$/, '') } : {}),
+    ...(token ? { token } : {}),
+    ...(clientCertificateData ? { clientCertificateData } : {}),
+    ...(clientKeyData ? { clientKeyData } : {}),
+    ...(certificateAuthorityData ? { certificateAuthorityData } : {}),
   };
 };
 

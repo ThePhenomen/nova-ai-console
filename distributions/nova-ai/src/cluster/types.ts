@@ -1,6 +1,9 @@
 export type ClusterConnection = {
   apiServer: string;
-  token: string;
+  token?: string;
+  clientCertificateData?: string;
+  clientKeyData?: string;
+  certificateAuthorityData?: string;
 };
 
 export type K8sObjectMeta = {
@@ -67,4 +70,11 @@ export type RoleBindingKind = {
     namespace?: string;
     apiGroup?: string;
   }>;
+};
+
+export const hasClusterCredentials = (connection: ClusterConnection): boolean => {
+  if (connection.token && connection.token.trim() !== '') {
+    return true;
+  }
+  return Boolean(connection.clientCertificateData && connection.clientKeyData);
 };
