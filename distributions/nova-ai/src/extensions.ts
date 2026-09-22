@@ -24,7 +24,7 @@ const extensions: Extension[] = [
       path: '/experiments',
     },
     flags: {
-      required: ['mlflow-experiments'],
+      required: ['experiments'],
     },
   } satisfies HrefNavItemExtension,
   {
@@ -41,7 +41,7 @@ const extensions: Extension[] = [
       component: () => import('./pages/experiments/Experiments'),
     },
     flags: {
-      required: ['mlflow-experiments'],
+      required: ['experiments'],
     },
   } satisfies RouteExtension,
   {

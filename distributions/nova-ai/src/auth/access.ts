@@ -12,6 +12,7 @@ import type {
 
 export const CONSOLE_SERVICE_LABEL = 'nova-ai.io/console-service';
 export const CONSOLE_PERSONA_LABEL = 'nova-ai.io/console-persona';
+export const CONSOLE_OIDC_APPLICATION = 'nova-ai-console';
 export const CONTRIBUTOR_AGGREGATE_LABEL = 'nova-ai.io/aggregate-to-developer';
 
 const ROLE_RANK: Record<ConsoleRole, number> = {
@@ -371,8 +372,20 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
   };
 };
 
+export const normalizeConsoleService = (service: string): string =>
+  service.trim().toLowerCase().replace(/\s+/g, '-');
+
+const SERVICE_ALIASES: Record<string, string> = {
+  mlflow: 'experiments',
+};
+
+export const canonicalConsoleService = (service: string): string => {
+  const normalized = normalizeConsoleService(service);
+  return SERVICE_ALIASES[normalized] ?? normalized;
+};
+
 export const hasProjectService = (access: ProjectAccess, service: string): boolean =>
-  access.services.includes(service);
+  access.services.some((item) => canonicalConsoleService(item) === canonicalConsoleService(service));
 
 export const hasConsoleService = (access: PlatformAccess, service: string): boolean =>
-  access.services.includes(service);
+  access.services.some((item) => canonicalConsoleService(item) === canonicalConsoleService(service));

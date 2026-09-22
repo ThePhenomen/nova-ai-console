@@ -6,11 +6,11 @@ import {
   Checkbox,
   EmptyState,
   EmptyStateBody,
+  Flex,
+  FlexItem,
   Form,
   FormGroup,
   FormHelperText,
-  FormSelect,
-  FormSelectOption,
   HelperText,
   HelperTextItem,
   PageSection,
@@ -20,8 +20,10 @@ import {
   ToolbarContent,
   ToolbarItem,
 } from '@patternfly/react-core';
+import { MinusCircleIcon, PlusCircleIcon } from '@patternfly/react-icons';
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import {
+  CONSOLE_OIDC_APPLICATION,
   CONSOLE_PERSONA_LABEL,
   CONSOLE_SERVICE_LABEL,
   consoleRoleFromPlatformRole,
@@ -41,15 +43,12 @@ type RolesTabProps = {
   projectName: string;
 };
 
-type RoleKindChoice = 'service' | 'contributor';
+type SelectorRow = {
+  key: string;
+  value: string;
+};
 
-const ROLE_KIND_OPTIONS: Array<{ value: RoleKindChoice; label: string }> = [
-  { value: 'contributor', label: 'Contributor — Kubernetes project access' },
-  { value: 'service', label: 'Service only — extra sidebar tabs (for example MLflow)' },
-];
-
-const CONTRIBUTOR_SELECTOR = { matchLabels: { 'nova-ai.io/aggregate-to-developer': 'true' } };
-const ADMIN_SELECTOR = { matchLabels: { 'nova-ai.io/aggregate-to-admin': 'true' } };
+const emptySelector = (): SelectorRow => ({ key: '', value: '' });
 
 const formatList = (values: string[]): string => (values.length > 0 ? values.join(', ') : '—');
 
@@ -59,18 +58,13 @@ const parseCsv = (value: string): string[] =>
     .map((item) => item.trim())
     .filter((item) => item !== '');
 
-const kubernetesForKind = (
-  kind: RoleKindChoice,
-  isAdminUi: boolean,
-): { clusterRoleSelectors: Array<{ matchLabels: Record<string, string> }> } | undefined => {
-  if (isAdminUi) {
-    return { clusterRoleSelectors: [CONTRIBUTOR_SELECTOR, ADMIN_SELECTOR] };
-  }
-  if (kind === 'contributor') {
-    return { clusterRoleSelectors: [CONTRIBUTOR_SELECTOR] };
-  }
-  return undefined;
-};
+const selectorsFromRows = (
+  rows: SelectorRow[],
+): Array<{ matchLabels: Record<string, string> }> =>
+  rows
+    .map((row) => ({ key: row.key.trim(), value: row.value.trim() }))
+    .filter((row) => row.key !== '' && row.value !== '')
+    .map((row) => ({ matchLabels: { [row.key]: row.value } }));
 
 const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const [roles, setRoles] = React.useState<PlatformRoleKind[]>([]);
@@ -80,8 +74,8 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
   const [name, setName] = React.useState('');
-  const [roleKind, setRoleKind] = React.useState<RoleKindChoice>('contributor');
   const [isAdminUi, setIsAdminUi] = React.useState(false);
+  const [selectors, setSelectors] = React.useState<SelectorRow[]>([emptySelector()]);
   const [services, setServices] = React.useState('');
   const [isFormOpen, setIsFormOpen] = React.useState(false);
 
@@ -127,6 +121,15 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
     void load();
   }, [load]);
 
+  const resetForm = () => {
+    setName('');
+    setIsAdminUi(false);
+    setSelectors([emptySelector()]);
+    setServices('');
+    setIsFormOpen(false);
+    setFormError(null);
+  };
+
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormError(null);
@@ -143,7 +146,7 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
     if (serviceList.length > 0) {
       labels[CONSOLE_SERVICE_LABEL] = serviceList.join(',');
     }
-    const kubernetes = kubernetesForKind(roleKind, isAdminUi);
+    const clusterRoleSelectors = selectorsFromRows(selectors);
     setIsSaving(true);
     try {
       await createPlatformRole({
@@ -151,17 +154,13 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
         kind: 'PlatformRole',
         metadata: { name: roleName, labels },
         spec: {
-          ...(kubernetes ? { kubernetes } : {}),
+          ...(clusterRoleSelectors.length > 0 ? { kubernetes: { clusterRoleSelectors } } : {}),
           oidc: {
-            applications: ['nova-ai-console'],
+            applications: [CONSOLE_OIDC_APPLICATION],
           },
         },
       });
-      setName('');
-      setRoleKind('contributor');
-      setIsAdminUi(false);
-      setServices('');
-      setIsFormOpen(false);
+      resetForm();
       await load();
     } catch (err) {
       setFormError(
@@ -224,52 +223,98 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
               id="create-role-name"
               value={name}
               onChange={(_event, value) => setName(value)}
-              placeholder="nova-ai-mlflow"
+              placeholder="nova-ai-experiments"
               isRequired
             />
-          </FormGroup>
-          <FormGroup label="Kubernetes access" fieldId="create-role-kind">
-            <FormSelect
-              id="create-role-kind"
-              value={isAdminUi ? 'contributor' : roleKind}
-              onChange={(_event, value) => setRoleKind(value as RoleKindChoice)}
-              aria-label="Kubernetes access"
-              isDisabled={isAdminUi}
-            >
-              {ROLE_KIND_OPTIONS.map((option) => (
-                <FormSelectOption key={option.value} value={option.value} label={option.label} />
-              ))}
-            </FormSelect>
-            <FormHelperText>
-              <HelperText>
-                <HelperTextItem>
-                  Aggregation selectors for Kubernetes RBAC. Independent of the admin console
-                  marker below.
-                </HelperTextItem>
-              </HelperText>
-            </FormHelperText>
           </FormGroup>
           <FormGroup fieldId="create-role-admin-ui">
             <Checkbox
               id="create-role-admin-ui"
               label="Admin in console"
-              description="Adds nova-ai.io/console-persona: admin. Bound users can create projects and manage Roles/Permissions. Leave unchecked for normal contributor UI."
+              description="Adds nova-ai.io/console-persona: admin. Bound users can create projects and manage Roles/Permissions."
               isChecked={isAdminUi}
               onChange={(_event, checked) => setIsAdminUi(checked)}
             />
+          </FormGroup>
+          <FormGroup label="Cluster role selectors" fieldId="create-role-selectors">
+            {selectors.map((row, index) => (
+              <Flex
+                key={`selector-${index}`}
+                spaceItems={{ default: 'spaceItemsSm' }}
+                style={{ marginBottom: '0.5rem' }}
+              >
+                <FlexItem flex={{ default: 'flex_1' }}>
+                  <TextInput
+                    aria-label={`Selector ${index + 1} key`}
+                    value={row.key}
+                    onChange={(_event, value) =>
+                      setSelectors((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, key: value } : item,
+                        ),
+                      )
+                    }
+                    placeholder="nova-ai.io/aggregate-to-developer"
+                  />
+                </FlexItem>
+                <FlexItem flex={{ default: 'flex_1' }}>
+                  <TextInput
+                    aria-label={`Selector ${index + 1} value`}
+                    value={row.value}
+                    onChange={(_event, value) =>
+                      setSelectors((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, value } : item,
+                        ),
+                      )
+                    }
+                    placeholder="true"
+                  />
+                </FlexItem>
+                <FlexItem>
+                  <Button
+                    variant="plain"
+                    icon={<MinusCircleIcon />}
+                    onClick={() =>
+                      setSelectors((current) =>
+                        current.length === 1
+                          ? [emptySelector()]
+                          : current.filter((_, itemIndex) => itemIndex !== index),
+                      )
+                    }
+                    aria-label={`Remove selector ${index + 1}`}
+                  />
+                </FlexItem>
+              </Flex>
+            ))}
+            <Button
+              variant="link"
+              icon={<PlusCircleIcon />}
+              onClick={() => setSelectors((current) => [...current, emptySelector()])}
+            >
+              Add selector
+            </Button>
+            <FormHelperText>
+              <HelperText>
+                <HelperTextItem>
+                  Each row becomes one `matchLabels` entry in spec.kubernetes.clusterRoleSelectors.
+                  Leave empty for an OIDC-only role.
+                </HelperTextItem>
+              </HelperText>
+            </FormHelperText>
           </FormGroup>
           <FormGroup label="Console services" fieldId="create-role-services">
             <TextInput
               id="create-role-services"
               value={services}
               onChange={(_event, value) => setServices(value)}
-              placeholder="mlflow"
+              placeholder="Experiments"
             />
             <FormHelperText>
               <HelperText>
                 <HelperTextItem>
-                  Optional. Comma-separated values for extra sidebar tabs. Use mlflow for
-                  Experiments. The Projects tab is always shown.
+                  Optional. Comma-separated sidebar tab names this role unlocks. Projects is always
+                  shown. Example: Experiments.
                 </HelperTextItem>
               </HelperText>
             </FormHelperText>
@@ -278,15 +323,7 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
             <Button type="submit" variant="primary" isLoading={isSaving} isDisabled={isSaving}>
               Create
             </Button>
-            <Button
-              type="button"
-              variant="link"
-              onClick={() => {
-                setIsFormOpen(false);
-                setFormError(null);
-              }}
-              isDisabled={isSaving}
-            >
+            <Button type="button" variant="link" onClick={resetForm} isDisabled={isSaving}>
               Cancel
             </Button>
           </div>

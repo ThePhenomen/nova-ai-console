@@ -40,7 +40,7 @@ metadata:
   name: nova-ai-mlflow
   labels:
     nova-ai.io/console: nova-ai-console
-    nova-ai.io/console-service: mlflow
+    nova-ai.io/console-service: Experiments
 spec:
   oidc:
     applications:

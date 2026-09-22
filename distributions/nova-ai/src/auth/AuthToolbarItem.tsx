@@ -18,7 +18,7 @@ const AuthToolbarItem: React.FC = () => {
 
   React.useEffect(() => {
     store.setFeatureFlags({
-      'mlflow-experiments': hasConsoleService(access, 'mlflow'),
+      experiments: hasConsoleService(access, 'Experiments'),
     });
   }, [access, store]);
 
