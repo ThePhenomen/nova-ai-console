@@ -1,11 +1,12 @@
 import React from 'react';
-import { Alert, Bullseye, PageSection, Spinner } from '@patternfly/react-core';
+import { Alert, Bullseye, Button, PageSection, Spinner } from '@patternfly/react-core';
 import { useNavigate } from 'react-router-dom';
-import { completeOidcLogin, OidcError } from './oidcClient';
+import { completeOidcLogin, formatOidcError, OidcError } from './oidcClient';
+import { getAuthSession } from './authSession';
 
 const AuthCallback: React.FC = () => {
   const navigate = useNavigate();
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<OidcError | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -17,10 +18,14 @@ const AuthCallback: React.FC = () => {
         }
       } catch (err) {
         if (!cancelled) {
+          if (getAuthSession()) {
+            navigate('/projects', { replace: true });
+            return;
+          }
           setError(
-            err instanceof OidcError || err instanceof Error
-              ? err.message
-              : 'OIDC sign-in failed.',
+            err instanceof OidcError
+              ? err
+              : formatOidcError(err instanceof Error ? err.message : 'OIDC sign-in failed.'),
           );
         }
       }
@@ -34,9 +39,12 @@ const AuthCallback: React.FC = () => {
   if (error) {
     return (
       <PageSection>
-        <Alert variant="danger" isInline title="Could not complete sign-in">
-          {error}
+        <Alert variant="danger" isInline title={error.title}>
+          {error.message}
         </Alert>
+        <Button variant="link" onClick={() => navigate('/projects', { replace: true })}>
+          Back to console
+        </Button>
       </PageSection>
     );
   }

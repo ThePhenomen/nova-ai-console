@@ -1,4 +1,4 @@
-import { setAuthSession } from './authSession';
+import { getAuthSession, setAuthSession } from './authSession';
 import type { AuthSession, AuthUser, OidcConfig } from './types';
 
 const PKCE_STORAGE_KEY = 'nova-ai.oidc.pkce';
@@ -6,11 +6,53 @@ const OIDC_FORWARD_PATH = '/oidc-forward';
 const OIDC_PKCE_PATH = '/oidc-pkce';
 
 export class OidcError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly title = 'Could not complete sign-in',
+  ) {
     super(message);
     this.name = 'OidcError';
   }
 }
+
+export const formatOidcError = (raw: string): OidcError => {
+  const text = raw.toLowerCase();
+  if (
+    text.includes('grant is invalid') ||
+    text.includes('invalid_grant') ||
+    (text.includes('authorization code') && text.includes('expired'))
+  ) {
+    return new OidcError(
+      'The one-time authorization code was already used or expired. This is not a missing-permissions error. Sign in again.',
+      'Sign-in code already used',
+    );
+  }
+  if (text.includes('client failed to authenticate') || text.includes('invalid_client')) {
+    return new OidcError(
+      'StarVault rejected the OIDC client. For a confidential client, paste the client secret from identity/oidc/client/<name>.',
+      'OIDC client was rejected',
+    );
+  }
+  if (
+    text.includes('access denied') ||
+    text.includes('not authorized') ||
+    text.includes('not assigned') ||
+    text.includes('no assignment') ||
+    text.includes('permission denied')
+  ) {
+    return new OidcError(
+      'This user can sign in to StarVault, but has no OIDC assignment for the console. Create a PlatformRoleBinding to nova-ai-admin, nova-ai-developer, or nova-ai-mlflow.',
+      'No platform role assigned',
+    );
+  }
+  if (text.includes('redirect_uri')) {
+    return new OidcError(
+      'The redirect URI is not registered on the StarVault OIDC client. Add the URI shown in the sign-in dialog.',
+      'Redirect URI mismatch',
+    );
+  }
+  return new OidcError(raw);
+};
 
 type DiscoveryDocument = {
   authorization_endpoint: string;
@@ -259,11 +301,11 @@ const readHandshake = (): PkceHandshake => {
   return handshake;
 };
 
-export const completeOidcLogin = async (callbackUrl: string): Promise<AuthSession> => {
+const exchangeAuthorizationCode = async (callbackUrl: string): Promise<AuthSession> => {
   const params = new URL(callbackUrl).searchParams;
   const error = params.get('error');
   if (error) {
-    throw new OidcError(params.get('error_description') || error);
+    throw formatOidcError(params.get('error_description') || error);
   }
   const code = params.get('code');
   const state = params.get('state');
@@ -297,7 +339,7 @@ export const completeOidcLogin = async (callbackUrl: string): Promise<AuthSessio
     body: body.toString(),
   });
   if (!response.ok) {
-    throw new OidcError(await readErrorMessage(response));
+    throw formatOidcError(await readErrorMessage(response));
   }
 
   const payload: unknown = await response.json();
@@ -325,6 +367,38 @@ export const completeOidcLogin = async (callbackUrl: string): Promise<AuthSessio
   sessionStorage.removeItem(PKCE_STORAGE_KEY);
   setAuthSession(session);
   return session;
+};
+
+const exchanges = new Map<string, Promise<AuthSession>>();
+
+export const completeOidcLogin = async (callbackUrl: string): Promise<AuthSession> => {
+  const code = new URL(callbackUrl).searchParams.get('code');
+  if (code) {
+    const inFlight = exchanges.get(code);
+    if (inFlight) {
+      return inFlight;
+    }
+  }
+  const existing = getAuthSession();
+  if (existing && !code) {
+    return existing;
+  }
+  const exchange = exchangeAuthorizationCode(callbackUrl);
+  if (code) {
+    exchanges.set(code, exchange);
+  }
+  try {
+    return await exchange;
+  } catch (error) {
+    if (code) {
+      exchanges.delete(code);
+    }
+    const existingAfterFailure = getAuthSession();
+    if (existingAfterFailure) {
+      return existingAfterFailure;
+    }
+    throw error;
+  }
 };
 
 export const logoutOidc = (): void => {
