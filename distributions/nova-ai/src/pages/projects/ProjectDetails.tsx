@@ -96,7 +96,9 @@ const ProjectDetails: React.FC = () => {
           ))}
         </Tabs>
       </PageSection>
-      {activeTab === 'overview' ? <OverviewTab projectName={projectName} /> : null}
+      {activeTab === 'overview' ? (
+        <OverviewTab projectName={projectName} canManageRbac={projectAccess.canManageRbac} />
+      ) : null}
       {activeTab === 'workbench' ? (
         <PlaceholderTab title="Workbench" description="Workbenches in this project will appear here." />
       ) : null}

@@ -11,9 +11,14 @@ metadata:
     nova-ai.io/console: nova-ai-console
     nova-ai.io/aggregate-to-developer: "true"
 rules:
-  # View the project the user is bound to.
+  # Get the bound project namespace. Do not list: list is cluster-scoped and
+  # would expose every namespace in the cluster.
   - apiGroups: [""]
-    resources: ["namespaces", "resourcequotas", "pods", "pods/status", "events"]
+    resources: ["namespaces"]
+    verbs: ["get"]
+  # Namespaced quota/pod/event view in the bound project.
+  - apiGroups: [""]
+    resources: ["resourcequotas", "pods", "pods/status", "events"]
     verbs: ["get", "list", "watch"]
   # Namespaced KServe CRs — full access in the bound namespace.
   - apiGroups: ["serving.kserve.io"]
@@ -51,10 +56,10 @@ metadata:
     nova-ai.io/console: nova-ai-console
     nova-ai.io/aggregate-to-admin: "true"
 rules:
-  # Create and manage projects (namespaces + quotas).
+  # Create, list and manage projects (namespaces + quotas).
   - apiGroups: [""]
     resources: ["namespaces"]
-    verbs: ["create", "update", "patch", "delete"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["resourcequotas"]
     verbs: ["*"]

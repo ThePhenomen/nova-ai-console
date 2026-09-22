@@ -5,16 +5,22 @@ import {
   Card,
   CardBody,
   CardTitle,
+  Content,
   DescriptionList,
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
+  ExpandableSection,
+  Flex,
+  FlexItem,
   PageSection,
   Spinner,
   Stack,
   StackItem,
 } from '@patternfly/react-core';
+import { KeyIcon, UsersIcon } from '@patternfly/react-icons';
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
+import { Link } from 'react-router-dom';
 import { K8sApiError } from '../../../cluster/k8sClient';
 import type { NamespaceKind, ResourceQuotaKind } from '../../../cluster/types';
 import { hasConsoleScope } from '../../../consoleScope';
@@ -22,13 +28,49 @@ import { getNamespace, getProjectDescription, listNamespaceQuotas } from '../pro
 
 type OverviewTabProps = {
   projectName: string;
+  canManageRbac?: boolean;
 };
 
-const OverviewTab: React.FC<OverviewTabProps> = ({ projectName }) => {
+const ConfigLinkCard: React.FC<{
+  to: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+}> = ({ to, title, description, icon }) => (
+  <FlexItem flex={{ default: 'flex_1' }} style={{ minWidth: '16rem' }}>
+    <Flex alignItems={{ default: 'alignItemsFlexStart' }} spaceItems={{ default: 'spaceItemsMd' }}>
+      <FlexItem>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '2.5rem',
+            height: '2.5rem',
+            borderRadius: '50%',
+            background: 'var(--pf-t--global--color--nonstatus--orange--default, #c4610e)',
+            color: 'var(--pf-t--global--icon--color--inverse, #fff)',
+          }}
+        >
+          {icon}
+        </span>
+      </FlexItem>
+      <FlexItem flex={{ default: 'flex_1' }}>
+        <Content>
+          <Link to={to}>{title}</Link>
+        </Content>
+        <Content component="small">{description}</Content>
+      </FlexItem>
+    </Flex>
+  </FlexItem>
+);
+
+const OverviewTab: React.FC<OverviewTabProps> = ({ projectName, canManageRbac = false }) => {
   const [namespace, setNamespace] = React.useState<NamespaceKind | null>(null);
   const [quotas, setQuotas] = React.useState<ResourceQuotaKind[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [isConfigOpen, setIsConfigOpen] = React.useState(true);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -89,6 +131,42 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ projectName }) => {
   return (
     <PageSection>
       <Stack hasGutter>
+        {canManageRbac ? (
+          <StackItem>
+            <ExpandableSection
+              toggleText="Project configuration"
+              isExpanded={isConfigOpen}
+              onToggle={(_event, expanded) => setIsConfigOpen(expanded)}
+            >
+              <div
+                style={{
+                  border: '1px solid var(--pf-t--global--border--color--default, #a2a9b4)',
+                  borderRadius: '8px',
+                  padding: '1.25rem 1.5rem',
+                }}
+              >
+                <Flex
+                  spaceItems={{ default: 'spaceItemsXl' }}
+                  alignItems={{ default: 'alignItemsStretch' }}
+                  flexWrap={{ default: 'wrap' }}
+                >
+                  <ConfigLinkCard
+                    to={`/projects/${projectName}/roles`}
+                    title="Roles"
+                    description="Create and view Nova AI PlatformRoles used by this console."
+                    icon={<KeyIcon />}
+                  />
+                  <ConfigLinkCard
+                    to={`/projects/${projectName}/permissions`}
+                    title="Permissions"
+                    description="Add users and groups to share access to your project."
+                    icon={<UsersIcon />}
+                  />
+                </Flex>
+              </div>
+            </ExpandableSection>
+          </StackItem>
+        ) : null}
         <StackItem>
           <Card>
             <CardTitle>Details</CardTitle>

@@ -333,9 +333,10 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
     }
 
     clusterServices.push(...services);
-    if (target === 'Cluster') {
-      seesAllProjects = true;
-    }
+  }
+
+  if (consoleRole === 'admin') {
+    seesAllProjects = true;
   }
 
   const grantedServices = unique([
