@@ -18,11 +18,19 @@ import {
 } from '@patternfly/react-core';
 import { MinusCircleIcon, PlusCircleIcon } from '@patternfly/react-icons';
 import { K8sApiError } from '../../cluster/k8sClient';
-import { createProject, NAMESPACE_NAME_PATTERN, type ProjectQuotaInput } from './projectApi';
+import {
+  createProject,
+  NAMESPACE_NAME_PATTERN,
+  quotaInputFromHard,
+  updateProject,
+  type ProjectQuotaInput,
+  type ProjectSummary,
+} from './projectApi';
 
 type CreateProjectModalProps = {
   onClose: () => void;
   onCreated: (name: string) => void;
+  project?: ProjectSummary;
 };
 
 const emptyQuota: ProjectQuotaInput = {
@@ -36,10 +44,13 @@ const emptyQuota: ProjectQuotaInput = {
 
 type QuotaScalar = Exclude<keyof ProjectQuotaInput, 'accelerators'>;
 
-const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose, onCreated }) => {
-  const [name, setName] = React.useState('');
-  const [description, setDescription] = React.useState('');
-  const [quota, setQuota] = React.useState<ProjectQuotaInput>(emptyQuota);
+const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose, onCreated, project }) => {
+  const isEdit = Boolean(project);
+  const [name, setName] = React.useState(project?.name ?? '');
+  const [description, setDescription] = React.useState(project?.description ?? '');
+  const [quota, setQuota] = React.useState<ProjectQuotaInput>(
+    project ? quotaInputFromHard(project.quota?.spec?.hard ?? project.quota?.status?.hard) : emptyQuota,
+  );
   const [error, setError] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
 
@@ -83,7 +94,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose, onCrea
 
     setIsSaving(true);
     try {
-      await createProject({ name: trimmedName, description, quota });
+      if (isEdit) {
+        await updateProject({ name: trimmedName, description, quota });
+      } else {
+        await createProject({ name: trimmedName, description, quota });
+      }
       onCreated(trimmedName);
     } catch (err) {
       setError(
@@ -97,15 +112,19 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose, onCrea
   };
 
   return (
-    <Modal isOpen variant="medium" onClose={onClose} aria-label="Create project">
+    <Modal isOpen variant="medium" onClose={onClose} aria-label={isEdit ? 'Edit project' : 'Create project'}>
       <ModalHeader
-        title="Create project"
-        description="A project is a Kubernetes namespace labeled nova-ai.io/console=nova-ai-console, with a resource quota and optional description."
+        title={isEdit ? 'Edit project' : 'Create project'}
+        description={
+          isEdit
+            ? 'Update the project description and resource quota. The project name cannot be changed.'
+            : 'A project is a Kubernetes namespace labeled nova-ai.io/console=nova-ai-console, with a resource quota and optional description.'
+        }
       />
       <ModalBody>
         <Form id="create-project-form" onSubmit={submit}>
           {error ? (
-            <Alert variant="danger" isInline title="Could not create project">
+            <Alert variant="danger" isInline title={isEdit ? 'Could not update project' : 'Could not create project'}>
               {error}
             </Alert>
           ) : null}
@@ -116,6 +135,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose, onCrea
               onChange={(_event, value) => setName(value)}
               placeholder="ml-team"
               isRequired
+              isDisabled={isEdit}
             />
             <FormHelperText>
               <HelperText>
@@ -235,7 +255,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose, onCrea
           isLoading={isSaving}
           isDisabled={isSaving}
         >
-          Create
+          {isEdit ? 'Save' : 'Create'}
         </Button>
         <Button key="cancel" variant="link" onClick={onClose} isDisabled={isSaving}>
           Cancel

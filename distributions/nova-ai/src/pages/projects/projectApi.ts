@@ -114,6 +114,83 @@ export const listNamespaceQuotas = (name: string): Promise<ResourceQuotaKind[]> 
     `/api/v1/namespaces/${encodeURIComponent(name)}/resourcequotas`,
   ).then((list) => list.items);
 
+export const quotaInputFromHard = (hard?: Record<string, string>): ProjectQuotaInput => {
+  const values = hard ?? {};
+  const known = new Set(['requests.cpu', 'limits.cpu', 'requests.memory', 'limits.memory', 'pods']);
+  const accelerators = Object.entries(values)
+    .filter(([resource]) => !known.has(resource))
+    .map(([resource, quantity]) => ({ resource, quantity }));
+  return {
+    cpuRequest: values['requests.cpu'] ?? '',
+    cpuLimit: values['limits.cpu'] ?? '',
+    memoryRequest: values['requests.memory'] ?? '',
+    memoryLimit: values['limits.memory'] ?? '',
+    pods: values.pods ?? '',
+    accelerators: accelerators.length > 0 ? accelerators : [{ resource: '', quantity: '' }],
+  };
+};
+
+export const updateProject = async (input: CreateProjectInput): Promise<void> => {
+  const name = input.name.trim();
+  const hard = quotaHardFromInput(input.quota);
+  if (Object.keys(hard).length === 0) {
+    throw new Error('Set at least one resource quota value.');
+  }
+
+  const namespace = await getNamespace(name);
+  const annotations = { ...(namespace.metadata.annotations ?? {}) };
+  if (input.description.trim()) {
+    annotations[PROJECT_DESCRIPTION_ANNOTATION] = input.description.trim();
+  } else {
+    delete annotations[PROJECT_DESCRIPTION_ANNOTATION];
+  }
+  await k8sRequest(`/api/v1/namespaces/${encodeURIComponent(name)}`, {
+    method: 'PUT',
+    body: {
+      ...namespace,
+      metadata: {
+        ...namespace.metadata,
+        annotations,
+      },
+    },
+  });
+
+  const quotas = await listNamespaceQuotas(name);
+  const existing =
+    quotas.find((quota) => quota.metadata.name === PROJECT_QUOTA_NAME) ?? quotas[0];
+  if (existing) {
+    await k8sRequest(
+      `/api/v1/namespaces/${encodeURIComponent(name)}/resourcequotas/${encodeURIComponent(
+        existing.metadata.name,
+      )}`,
+      {
+        method: 'PUT',
+        body: {
+          ...existing,
+          spec: {
+            ...existing.spec,
+            hard,
+          },
+        },
+      },
+    );
+    return;
+  }
+
+  await k8sRequest(`/api/v1/namespaces/${encodeURIComponent(name)}/resourcequotas`, {
+    method: 'POST',
+    body: {
+      apiVersion: 'v1',
+      kind: 'ResourceQuota',
+      metadata: { name: PROJECT_QUOTA_NAME },
+      spec: { hard },
+    },
+  });
+};
+
+export const deleteProject = (name: string): Promise<void> =>
+  k8sRequest(`/api/v1/namespaces/${encodeURIComponent(name)}`, { method: 'DELETE' });
+
 export const NAMESPACE_NAME_PATTERN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 
 export const createProject = async (input: CreateProjectInput): Promise<void> => {

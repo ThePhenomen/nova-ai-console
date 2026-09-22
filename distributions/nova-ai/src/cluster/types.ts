@@ -13,6 +13,7 @@ export type K8sObjectMeta = {
   creationTimestamp?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
+  resourceVersion?: string;
 };
 
 export type K8sList<T> = {
