@@ -45,7 +45,7 @@ const extensions: Extension[] = [
       id: 'deployments',
       title: 'Deployments',
       href: '/deployments',
-      path: '/deployments',
+      path: '/deployments/*',
     },
     flags: {
       required: ['deployments'],
@@ -81,7 +81,7 @@ const extensions: Extension[] = [
   {
     type: 'app.route',
     properties: {
-      path: '/deployments',
+      path: '/deployments/*',
       component: () => import('./pages/deployments/Deployments'),
     },
     flags: {

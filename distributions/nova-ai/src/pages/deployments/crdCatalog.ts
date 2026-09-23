@@ -134,6 +134,16 @@ export const KIND_CATALOG: KindCatalog[] = [
   },
 ];
 
+export const deploymentDetailsPath = (
+  namespace: string,
+  kind: string,
+  name: string,
+  fromProject: boolean,
+): string =>
+  fromProject
+    ? `/projects/${encodeURIComponent(namespace)}/deployments/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`
+    : `/deployments/${encodeURIComponent(namespace)}/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`;
+
 export const kindByName = (kind: string): KindCatalog => {
   const found = KIND_CATALOG.find((item) => item.kind === kind);
   if (!found) {

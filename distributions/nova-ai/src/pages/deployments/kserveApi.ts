@@ -35,6 +35,12 @@ export const listKServeResources = async (
   return list.items ?? [];
 };
 
+export const getKServeResource = (
+  kind: KindCatalog,
+  namespace: string,
+  name: string,
+): Promise<KServeResource> => k8sRequest<KServeResource>(itemPath(kind, namespace, name));
+
 export const createKServeResource = (
   kind: KindCatalog,
   resource: KServeResource,

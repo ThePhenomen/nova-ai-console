@@ -40,6 +40,11 @@ export type EnvDraft = {
   value: string;
 };
 
+export type LabelDraft = {
+  key: string;
+  value: string;
+};
+
 export type GraphStepDraft = {
   serviceName: string;
   name: string;
@@ -297,6 +302,24 @@ export const sanitizeEnv = (resource: KServeResource): void => {
   );
 };
 
+export const readLabels = (resource: KServeResource): LabelDraft[] =>
+  Object.entries(resource.metadata.labels ?? {}).map(([key, value]) => ({ key, value }));
+
+export const writeLabels = (resource: KServeResource, labels: LabelDraft[]): void => {
+  const next: Record<string, string> = {};
+  labels.forEach((item) => {
+    const key = item.key.trim();
+    if (key !== '') {
+      next[key] = item.value;
+    }
+  });
+  if (Object.keys(next).length === 0) {
+    delete resource.metadata.labels;
+    return;
+  }
+  resource.metadata.labels = next;
+};
+
 export const readGraphSteps = (resource: KServeResource): GraphStepDraft[] => {
   const value = getAt(resource, 'spec.nodes.root.steps');
   if (!Array.isArray(value)) {
@@ -374,11 +397,13 @@ export const writeWorkerSpecNumber = (resource: KServeResource, key: string, raw
     workerSpec = {};
     predictor.workerSpec = workerSpec;
   }
-  const parsed = Number(raw);
-  if (raw.trim() === '' || Number.isNaN(parsed)) {
+  if (raw.trim() === '') {
     delete workerSpec[key];
-  } else {
-    workerSpec[key] = parsed;
+  } else if (/^\d+$/.test(raw.trim())) {
+    const value = Number(raw.trim());
+    if (value >= 1) {
+      workerSpec[key] = value;
+    }
   }
   if (Object.keys(workerSpec).length === 0) {
     delete predictor.workerSpec;

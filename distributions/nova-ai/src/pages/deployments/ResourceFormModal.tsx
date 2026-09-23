@@ -38,6 +38,7 @@ import {
   prepareForSave,
   readEnv,
   readGraphSteps,
+  readLabels,
   readPorts,
   readStringList,
   resourceValue,
@@ -48,6 +49,7 @@ import {
   workerSpecNumber,
   writeEnv,
   writeGraphSteps,
+  writeLabels,
   writePorts,
   writeResourceValue,
   writeSpecResourceValue,
@@ -56,6 +58,7 @@ import {
   writeWorkerSpecNumber,
   type EnvDraft,
   type GraphStepDraft,
+  type LabelDraft,
   type PortDraft,
 } from './kserveHelpers';
 import { cloneResource, parseManifest, toManifest } from './manifest';
@@ -99,6 +102,9 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
   const [error, setError] = React.useState<string | null>(null);
   const [manifestError, setManifestError] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [labelRows, setLabelRows] = React.useState<LabelDraft[]>(() =>
+    resource ? readLabels(resource) : [],
+  );
 
   const projectChoices = namespaces && namespaces.length > 0 ? namespaces : [namespace];
   const storageMode = storageModeOf(draft);
@@ -126,6 +132,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
     const next = emptyResource(nextKind, draft.metadata.namespace ?? namespace);
     next.metadata.name = draft.metadata.name;
     applyDraft(next, nextKind);
+    setLabelRows([]);
     setError(null);
   };
 
@@ -163,6 +170,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
       }
       setDraft(parsed);
       setKind(nextKind);
+      setLabelRows(readLabels(parsed));
       setManifestError(null);
       setMode(nextMode);
     } catch (err) {
@@ -187,6 +195,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
       }
       setDraft(parsed);
       setKind(nextKind);
+      setLabelRows(readLabels(parsed));
       setManifestError(null);
     } catch (err) {
       setManifestError(err instanceof Error ? err.message : 'Could not parse YAML.');
@@ -222,6 +231,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
       return;
     }
     next.metadata.namespace = ns;
+    writeLabels(next, labelRows);
     if (resource?.metadata.resourceVersion) {
       next.metadata.resourceVersion = resource.metadata.resourceVersion;
     }
@@ -332,6 +342,70 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
           </FormGroup>
         );
       });
+
+  const renderLabels = () => (
+    <FormGroup label="Labels" fieldId="kserve-labels">
+      {labelRows.map((item, index) => (
+        <Flex
+          key={`label-${index}`}
+          alignItems={{ default: 'alignItemsFlexEnd' }}
+          spaceItems={{ default: 'spaceItemsSm' }}
+          style={{ marginTop: index === 0 ? 0 : '0.5rem' }}
+        >
+          <FlexItem grow={{ default: 'grow' }}>
+            <TextInput
+              id={`kserve-label-key-${index}`}
+              value={item.key}
+              onChange={(_event, value) => {
+                const nextRows: LabelDraft[] = labelRows.map((row, rowIndex) =>
+                  rowIndex === index ? { ...row, key: value } : row,
+                );
+                setLabelRows(nextRows);
+                patchDraft((next) => writeLabels(next, nextRows));
+              }}
+              placeholder="key"
+              aria-label={`Label key ${index + 1}`}
+            />
+          </FlexItem>
+          <FlexItem grow={{ default: 'grow' }}>
+            <TextInput
+              id={`kserve-label-value-${index}`}
+              value={item.value}
+              onChange={(_event, value) => {
+                const nextRows: LabelDraft[] = labelRows.map((row, rowIndex) =>
+                  rowIndex === index ? { ...row, value } : row,
+                );
+                setLabelRows(nextRows);
+                patchDraft((next) => writeLabels(next, nextRows));
+              }}
+              placeholder="value"
+              aria-label={`Label value ${index + 1}`}
+            />
+          </FlexItem>
+          <FlexItem>
+            <Button
+              variant="plain"
+              icon={<MinusCircleIcon />}
+              onClick={() => {
+                const nextRows = labelRows.filter((_row, rowIndex) => rowIndex !== index);
+                setLabelRows(nextRows);
+                patchDraft((next) => writeLabels(next, nextRows));
+              }}
+              aria-label={`Remove label ${index + 1}`}
+            />
+          </FlexItem>
+        </Flex>
+      ))}
+      <Button
+        variant="link"
+        icon={<PlusCircleIcon />}
+        onClick={() => setLabelRows([...labelRows, { key: '', value: '' }])}
+        style={addLinkStyle}
+      >
+        Add label
+      </Button>
+    </FormGroup>
+  );
 
   const renderInferenceServiceBasics = () => (
     <>
@@ -819,7 +893,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
       <FormHelperText>
         <HelperText>
           <HelperTextItem>
-            Used for multi-node serving. Remaining workerSpec keys can be set in the YAML editor.
+            Integers starting at 1. Remaining workerSpec keys can be set in the YAML editor.
           </HelperTextItem>
         </HelperText>
       </FormHelperText>
@@ -827,7 +901,8 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
         <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
           <TextInput
             id="kserve-pipeline-parallel"
-            type="number"
+            type="text"
+            inputMode="numeric"
             value={workerSpecNumber(draft, 'pipelineParallelSize')}
             onChange={(_event, value) =>
               patchDraft((next) => writeWorkerSpecNumber(next, 'pipelineParallelSize', value))
@@ -839,7 +914,8 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
         <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
           <TextInput
             id="kserve-tensor-parallel"
-            type="number"
+            type="text"
+            inputMode="numeric"
             value={workerSpecNumber(draft, 'tensorParallelSize')}
             onChange={(_event, value) =>
               patchDraft((next) => writeWorkerSpecNumber(next, 'tensorParallelSize', value))
@@ -920,6 +996,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
           {mode === 'fields' ? (
             <>
               {renderCatalogFields('basic')}
+              {renderLabels()}
               {kind.kind === 'InferenceService' ? renderInferenceServiceBasics() : null}
               {kind.kind === 'InferenceGraph' ? renderInferenceGraphBasics() : null}
               <div style={{ marginTop: '1rem' }}>

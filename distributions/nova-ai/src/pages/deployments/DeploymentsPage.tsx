@@ -3,10 +3,6 @@ import {
   Alert,
   Bullseye,
   Button,
-  DescriptionList,
-  DescriptionListDescription,
-  DescriptionListGroup,
-  DescriptionListTerm,
   EmptyState,
   EmptyStateActions,
   EmptyStateBody,
@@ -24,13 +20,20 @@ import {
 } from '@patternfly/react-core';
 import { CubesIcon } from '@patternfly/react-icons';
 import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
+import { useNavigate } from 'react-router-dom';
 import { hasProjectService } from '../../auth/access';
 import { usePlatformAccess } from '../../auth/usePlatformAccess';
 import { K8sApiError } from '../../cluster/k8sClient';
 import { listProjects } from '../projects/projectApi';
-import { KIND_CATALOG, kindByName, type KindCatalog, type KServeResource } from './crdCatalog';
+import {
+  KIND_CATALOG,
+  deploymentDetailsPath,
+  kindByName,
+  type KindCatalog,
+  type KServeResource,
+} from './crdCatalog';
 import { deleteKServeResource, listKServeResources } from './kserveApi';
-import { readyStatus, resourceSummary, serviceUrl, storageUriOf } from './kserveHelpers';
+import { predictorType, readyStatus, serviceUrl } from './kserveHelpers';
 import ResourceFormModal from './ResourceFormModal';
 
 type DeploymentsPageProps = {
@@ -59,6 +62,7 @@ const formatCreated = (value?: string): string => {
 
 const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
   const { access } = usePlatformAccess();
+  const navigate = useNavigate();
   const [items, setItems] = React.useState<KServeResource[]>([]);
   const [namespaces, setNamespaces] = React.useState<string[]>(projectName ? [projectName] : []);
   const [error, setError] = React.useState<string | null>(null);
@@ -66,7 +70,6 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [editTarget, setEditTarget] = React.useState<KServeResource | null>(null);
-  const [viewTarget, setViewTarget] = React.useState<KServeResource | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<KServeResource | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
@@ -117,6 +120,12 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
   const createNamespaces = namespaces.filter((namespace) => access.forProject(namespace).canEdit);
   const canCreate = createNamespaces.length > 0;
   const defaultCreateNamespace = projectName ?? createNamespaces[0] ?? '';
+  const openDetails = (item: KServeResource) => {
+    const namespace = item.metadata.namespace ?? '';
+    navigate(
+      deploymentDetailsPath(namespace, catalogOf(item).kind, item.metadata.name, Boolean(projectName)),
+    );
+  };
   const canMutateResource = (item: KServeResource): boolean =>
     access.forProject(item.metadata.namespace ?? '').canEdit;
 
@@ -220,7 +229,7 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
               <Th>Name</Th>
               <Th>Kind</Th>
               {!projectName ? <Th>Project</Th> : null}
-              <Th>Summary</Th>
+              <Th>Model format</Th>
               <Th>Ready</Th>
               <Th>URL</Th>
               <Th>Created</Th>
@@ -237,12 +246,14 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
                 <Tr
                   key={`${kind.kind}/${namespace}/${item.metadata.name}`}
                   isClickable
-                  onRowClick={() => setViewTarget(item)}
+                  onRowClick={() => openDetails(item)}
                 >
                   <Td dataLabel="Name">{item.metadata.name}</Td>
                   <Td dataLabel="Kind">{kind.title}</Td>
                   {!projectName ? <Td dataLabel="Project">{namespace || '—'}</Td> : null}
-                  <Td dataLabel="Summary">{resourceSummary(kind, item)}</Td>
+                  <Td dataLabel="Model format">
+                    {kind.kind === 'InferenceService' ? predictorType(item) : '—'}
+                  </Td>
                   <Td dataLabel="Ready">
                     <Label color={readyColor(ready)} isCompact>
                       {ready === 'True' ? 'Ready' : ready === 'False' ? 'Not ready' : 'Unknown'}
@@ -269,7 +280,7 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
                           title: 'View',
                           onClick: (event) => {
                             event?.stopPropagation();
-                            setViewTarget(item);
+                            openDetails(item);
                           },
                         },
                         {
@@ -322,87 +333,6 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
             void load();
           }}
         />
-      ) : null}
-      {viewTarget ? (
-        <Modal isOpen variant="medium" onClose={() => setViewTarget(null)} aria-label="Deployment details">
-          <ModalHeader title={viewTarget.metadata.name} />
-          <ModalBody>
-            <DescriptionList isHorizontal>
-              <DescriptionListGroup>
-                <DescriptionListTerm>Kind</DescriptionListTerm>
-                <DescriptionListDescription>{catalogOf(viewTarget).title}</DescriptionListDescription>
-              </DescriptionListGroup>
-              {viewTarget.metadata.namespace ? (
-                <DescriptionListGroup>
-                  <DescriptionListTerm>Project</DescriptionListTerm>
-                  <DescriptionListDescription>{viewTarget.metadata.namespace}</DescriptionListDescription>
-                </DescriptionListGroup>
-              ) : null}
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {catalogOf(viewTarget).kind === 'InferenceService' ? 'Storage URI' : 'Graph'}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  {catalogOf(viewTarget).kind === 'InferenceService'
-                    ? storageUriOf(viewTarget)
-                    : resourceSummary(catalogOf(viewTarget), viewTarget)}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-              <DescriptionListGroup>
-                <DescriptionListTerm>Ready</DescriptionListTerm>
-                <DescriptionListDescription>{readyStatus(viewTarget)}</DescriptionListDescription>
-              </DescriptionListGroup>
-              <DescriptionListGroup>
-                <DescriptionListTerm>URL</DescriptionListTerm>
-                <DescriptionListDescription>{serviceUrl(viewTarget) || '—'}</DescriptionListDescription>
-              </DescriptionListGroup>
-              <DescriptionListGroup>
-                <DescriptionListTerm>Created</DescriptionListTerm>
-                <DescriptionListDescription>
-                  {formatCreated(viewTarget.metadata.creationTimestamp)}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-            </DescriptionList>
-            {(viewTarget.status?.conditions ?? []).length > 0 ? (
-              <Table aria-label="Conditions" variant="compact" style={{ marginTop: '1rem' }}>
-                <Thead>
-                  <Tr>
-                    <Th>Type</Th>
-                    <Th>Status</Th>
-                    <Th>Reason</Th>
-                    <Th>Message</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {(viewTarget.status?.conditions ?? []).map((condition) => (
-                    <Tr key={`${condition.type}-${condition.lastTransitionTime ?? ''}`}>
-                      <Td dataLabel="Type">{condition.type ?? '—'}</Td>
-                      <Td dataLabel="Status">{condition.status ?? '—'}</Td>
-                      <Td dataLabel="Reason">{condition.reason ?? '—'}</Td>
-                      <Td dataLabel="Message">{condition.message ?? '—'}</Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            ) : null}
-          </ModalBody>
-          <ModalFooter>
-            {canMutateResource(viewTarget) ? (
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setEditTarget(viewTarget);
-                  setViewTarget(null);
-                }}
-              >
-                Edit
-              </Button>
-            ) : null}
-            <Button variant="link" onClick={() => setViewTarget(null)}>
-              Close
-            </Button>
-          </ModalFooter>
-        </Modal>
       ) : null}
       {deleteTarget ? (
         <Modal isOpen variant="small" onClose={() => setDeleteTarget(null)} aria-label="Delete deployment">
