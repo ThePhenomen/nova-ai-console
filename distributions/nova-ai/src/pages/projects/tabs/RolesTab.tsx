@@ -25,7 +25,7 @@ import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import {
   CONSOLE_OIDC_APPLICATION,
   CONSOLE_PERSONA_LABEL,
-  CONSOLE_SERVICE_LABEL,
+  canonicalConsoleService,
   consoleRoleFromPlatformRole,
   servicesFromRole,
 } from '../../../auth/access';
@@ -37,6 +37,7 @@ import {
 } from '../../../auth/platformApi';
 import type { PlatformRoleKind } from '../../../auth/types';
 import { K8sApiError } from '../../../cluster/k8sClient';
+import { CONSOLE_TAB_SERVICES, consoleServiceEnabledLabel } from '../../../consoleServices';
 import { consoleScopeLabels } from '../../../consoleScope';
 
 type RolesTabProps = {
@@ -52,11 +53,14 @@ const emptySelector = (): SelectorRow => ({ key: '', value: '' });
 
 const formatList = (values: string[]): string => (values.length > 0 ? values.join(', ') : '—');
 
-const parseCsv = (value: string): string[] =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter((item) => item !== '');
+const formatServices = (values: string[]): string =>
+  formatList(
+    values.map(
+      (value) =>
+        CONSOLE_TAB_SERVICES.find((item) => item.id === canonicalConsoleService(value))?.title ??
+        value,
+    ),
+  );
 
 const selectorsFromRows = (
   rows: SelectorRow[],
@@ -76,7 +80,7 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const [name, setName] = React.useState('');
   const [isAdminUi, setIsAdminUi] = React.useState(false);
   const [selectors, setSelectors] = React.useState<SelectorRow[]>([emptySelector()]);
-  const [services, setServices] = React.useState('');
+  const [enabledServices, setEnabledServices] = React.useState<string[]>([]);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
 
   const load = React.useCallback(async () => {
@@ -125,7 +129,7 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
     setName('');
     setIsAdminUi(false);
     setSelectors([emptySelector()]);
-    setServices('');
+    setEnabledServices([]);
     setIsFormOpen(false);
     setFormError(null);
   };
@@ -138,14 +142,13 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
       setFormError('Role name is required.');
       return;
     }
-    const serviceList = parseCsv(services);
     const labels: Record<string, string> = { ...consoleScopeLabels() };
     if (isAdminUi) {
       labels[CONSOLE_PERSONA_LABEL] = 'admin';
     }
-    if (serviceList.length > 0) {
-      labels[CONSOLE_SERVICE_LABEL] = serviceList.join(',');
-    }
+    enabledServices.forEach((serviceId) => {
+      labels[consoleServiceEnabledLabel(serviceId)] = 'true';
+    });
     const clusterRoleSelectors = selectorsFromRows(selectors);
     setIsSaving(true);
     try {
@@ -304,17 +307,26 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
             </FormHelperText>
           </FormGroup>
           <FormGroup label="Console services" fieldId="create-role-services">
-            <TextInput
-              id="create-role-services"
-              value={services}
-              onChange={(_event, value) => setServices(value)}
-              placeholder="Experiments, Workbench, Deployments"
-            />
+            {CONSOLE_TAB_SERVICES.map((service) => (
+              <Checkbox
+                key={service.id}
+                id={`create-role-service-${service.id}`}
+                label={service.title}
+                description={`Adds ${consoleServiceEnabledLabel(service.id)}: "true"`}
+                isChecked={enabledServices.includes(service.id)}
+                onChange={(_event, checked) =>
+                  setEnabledServices((current) =>
+                    checked
+                      ? [...current, service.id]
+                      : current.filter((item) => item !== service.id),
+                  )
+                }
+              />
+            ))}
             <FormHelperText>
               <HelperText>
                 <HelperTextItem>
-                  Optional. Comma-separated tab names this role unlocks in the sidebar and on
-                  projects. Projects is always shown. Example: Experiments, Workbench, Deployments.
+                  Unlocks the matching sidebar and project tabs. Projects is always shown.
                 </HelperTextItem>
               </HelperText>
             </FormHelperText>
@@ -354,7 +366,7 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
                 <Tr key={role.metadata.name}>
                   <Td dataLabel="Name">{role.metadata.name}</Td>
                   <Td dataLabel="Console access">{access === 'none' ? 'service' : access}</Td>
-                  <Td dataLabel="Console services">{formatList(servicesFromRole(role))}</Td>
+                  <Td dataLabel="Console services">{formatServices(servicesFromRole(role))}</Td>
                   <Td dataLabel="OIDC applications">
                     {formatList(role.spec?.oidc?.applications ?? [])}
                   </Td>

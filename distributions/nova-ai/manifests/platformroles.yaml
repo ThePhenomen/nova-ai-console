@@ -5,6 +5,9 @@ metadata:
   labels:
     nova-ai.io/console: nova-ai-console
     nova-ai.io/console-persona: admin
+    nova-ai.io/experiments-enabled: "true"
+    nova-ai.io/workbench-enabled: "true"
+    nova-ai.io/deployments-enabled: "true"
 spec:
   kubernetes:
     clusterRoleSelectors:
@@ -24,6 +27,8 @@ metadata:
   name: nova-ai-developer
   labels:
     nova-ai.io/console: nova-ai-console
+    nova-ai.io/experiments-enabled: "true"
+    nova-ai.io/workbench-enabled: "true"
 spec:
   kubernetes:
     clusterRoleSelectors:
@@ -33,15 +38,14 @@ spec:
     applications:
       - nova-ai-console
 ---
-# Experiments sidebar and project tab are gated on this service label.
-# Workbench and Deployments work the same way.
+# Optional one-tab roles for granular grants. Same *-enabled labels as above.
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRole
 metadata:
   name: nova-ai-mlflow
   labels:
     nova-ai.io/console: nova-ai-console
-    nova-ai.io/console-service: Experiments
+    nova-ai.io/experiments-enabled: "true"
 spec:
   oidc:
     applications:
@@ -53,7 +57,7 @@ metadata:
   name: nova-ai-workbench
   labels:
     nova-ai.io/console: nova-ai-console
-    nova-ai.io/console-service: Workbench
+    nova-ai.io/workbench-enabled: "true"
 spec:
   oidc:
     applications:
@@ -65,7 +69,7 @@ metadata:
   name: nova-ai-deployments
   labels:
     nova-ai.io/console: nova-ai-console
-    nova-ai.io/console-service: Deployments
+    nova-ai.io/deployments-enabled: "true"
 spec:
   oidc:
     applications:

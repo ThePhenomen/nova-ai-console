@@ -2,7 +2,7 @@
 # target: Cluster → console lists every nova-ai-console project (admin).
 # target: Namespaces → only the listed projects (contributor).
 # Sidebar and project extras (Workbench, Experiments, Deployments) come from
-# nova-ai.io/console-service on the role.
+# nova-ai.io/<tab>-enabled: "true" on the bound PlatformRole.
 ---
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRoleBinding

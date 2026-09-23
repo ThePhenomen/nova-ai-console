@@ -12,6 +12,7 @@ import type {
 } from './types';
 
 export const CONSOLE_SERVICE_LABEL = 'nova-ai.io/console-service';
+export const CONSOLE_SERVICE_ENABLED = /^nova-ai\.io\/(.+)-enabled$/;
 export const CONSOLE_PERSONA_LABEL = 'nova-ai.io/console-persona';
 export const CONSOLE_OIDC_APPLICATION = 'nova-ai-console';
 export const CONTRIBUTOR_AGGREGATE_LABEL = 'nova-ai.io/aggregate-to-developer';
@@ -226,15 +227,19 @@ export const consoleRoleFromPlatformRole = (role: PlatformRoleKind): ConsoleRole
 };
 
 export const servicesFromRole = (role: PlatformRoleKind): string[] => {
-  const labeled = role.metadata.labels?.[CONSOLE_SERVICE_LABEL];
-  const fromLabel = labeled
-    ? labeled
-        .split(',')
-        .map((value) => value.trim())
-        .filter((value) => value !== '')
-    : [];
-  if (fromLabel.length > 0) {
-    return unique(fromLabel);
+  const labels = role.metadata.labels ?? {};
+  const fromEnabled = Object.entries(labels).flatMap(([key, value]) => {
+    if (value !== 'true') {
+      return [];
+    }
+    const match = key.match(CONSOLE_SERVICE_ENABLED);
+    return match?.[1] ? [match[1]] : [];
+  });
+  const legacy = labels[CONSOLE_SERVICE_LABEL];
+  const fromLegacy = legacy && !legacy.includes(',') ? [legacy] : [];
+  const named = unique([...fromEnabled, ...fromLegacy]);
+  if (named.length > 0) {
+    return named;
   }
   const applications = role.spec?.oidc?.applications ?? [];
   return unique(
@@ -294,7 +299,8 @@ export type AccessInput = {
  * UI admin vs contributor is `nova-ai.io/console-persona: admin` on the bound
  * PlatformRole. Without that label the console is contributor: Projects is
  * always in the nav, extra sidebar and project tabs come from
- * nova-ai.io/console-service, and kubernetes.target still decides which
+ * nova-ai.io/<tab>-enabled: "true" (for example nova-ai.io/experiments-enabled),
+ * and kubernetes.target still decides which
  * namespaces are listed.
  * Kubernetes aggregation selectors are independent of the console label.
  */
