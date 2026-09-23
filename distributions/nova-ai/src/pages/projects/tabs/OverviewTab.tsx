@@ -18,12 +18,13 @@ import {
   Stack,
   StackItem,
 } from '@patternfly/react-core';
-import { KeyIcon, UsersIcon } from '@patternfly/react-icons';
+import { CubeIcon, KeyIcon, UsersIcon } from '@patternfly/react-icons';
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import { Link } from 'react-router-dom';
 import { K8sApiError } from '../../../cluster/k8sClient';
 import type { NamespaceKind, ResourceQuotaKind } from '../../../cluster/types';
 import { hasConsoleScope } from '../../../consoleScope';
+import { getCreateMlClusterUrl } from '../../../envNovaConsole';
 import { getNamespace, getProjectDescription, listNamespaceQuotas } from '../projectApi';
 
 type OverviewTabProps = {
@@ -36,7 +37,8 @@ const ConfigLinkCard: React.FC<{
   title: string;
   description: string;
   icon: React.ReactNode;
-}> = ({ to, title, description, icon }) => (
+  isExternal?: boolean;
+}> = ({ to, title, description, icon, isExternal = false }) => (
   <FlexItem flex={{ default: 'flex_1' }} style={{ minWidth: '16rem' }}>
     <Flex alignItems={{ default: 'alignItemsFlexStart' }} spaceItems={{ default: 'spaceItemsMd' }}>
       <FlexItem>
@@ -57,7 +59,13 @@ const ConfigLinkCard: React.FC<{
       </FlexItem>
       <FlexItem flex={{ default: 'flex_1' }}>
         <Content>
-          <Link to={to}>{title}</Link>
+          {isExternal ? (
+            <a href={to} target="_blank" rel="noopener noreferrer">
+              {title}
+            </a>
+          ) : (
+            <Link to={to}>{title}</Link>
+          )}
         </Content>
         <Content component="small">{description}</Content>
       </FlexItem>
@@ -66,6 +74,7 @@ const ConfigLinkCard: React.FC<{
 );
 
 const OverviewTab: React.FC<OverviewTabProps> = ({ projectName, canManageRbac = false }) => {
+  const mlClusterUrl = getCreateMlClusterUrl(projectName);
   const [namespace, setNamespace] = React.useState<NamespaceKind | null>(null);
   const [quotas, setQuotas] = React.useState<ResourceQuotaKind[]>([]);
   const [error, setError] = React.useState<string | null>(null);
@@ -233,6 +242,15 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ projectName, canManageRbac = 
                     description="Add users and groups to share access to your project."
                     icon={<UsersIcon />}
                   />
+                  {mlClusterUrl ? (
+                    <ConfigLinkCard
+                      to={mlClusterUrl}
+                      title="MLCluster"
+                      description="Create an MLCluster instance in this project."
+                      icon={<CubeIcon />}
+                      isExternal
+                    />
+                  ) : null}
                 </Flex>
               </div>
             </ExpandableSection>

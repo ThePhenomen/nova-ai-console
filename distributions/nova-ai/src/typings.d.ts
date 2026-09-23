@@ -26,5 +26,6 @@ declare namespace NodeJS {
     STARVAULT_OIDC_SCOPES?: string;
     STARVAULT_OIDC_REDIRECT_URI?: string;
     KUBECONFIG_API_SERVER?: string;
+    NOVA_CONSOLE_URL?: string;
   }
 }
