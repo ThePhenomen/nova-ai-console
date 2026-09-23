@@ -36,16 +36,26 @@ import {
   emptyResource,
   fieldToString,
   prepareForSave,
+  readEnv,
+  readGraphSteps,
   readPorts,
   readStringList,
   resourceValue,
   setStorageMode,
+  specResourceValue,
   storageField,
   storageModeOf,
+  workerSpecNumber,
+  writeEnv,
+  writeGraphSteps,
   writePorts,
   writeResourceValue,
+  writeSpecResourceValue,
   writeStorageField,
   writeStringList,
+  writeWorkerSpecNumber,
+  type EnvDraft,
+  type GraphStepDraft,
   type PortDraft,
 } from './kserveHelpers';
 import { cloneResource, parseManifest, toManifest } from './manifest';
@@ -93,7 +103,15 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
   const projectChoices = namespaces && namespaces.length > 0 ? namespaces : [namespace];
   const storageMode = storageModeOf(draft);
   const args = readStringList(draft, 'spec.predictor.model.args');
+  const env = readEnv(draft);
   const ports = readPorts(draft);
+  const graphSteps = readGraphSteps(draft);
+
+  const addLinkStyle: React.CSSProperties = {
+    paddingLeft: 0,
+    marginTop: '0.25rem',
+    color: 'var(--pf-t--global--color--brand--default, #0066cc)',
+  };
 
   const applyDraft = (next: KServeResource, nextKind = kind) => {
     setDraft(next);
@@ -241,6 +259,13 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
           return;
         }
       }
+      if (kind.kind === 'InferenceGraph') {
+        const steps = readGraphSteps(next).filter((step) => step.serviceName.trim() !== '');
+        if (steps.length === 0) {
+          setError('At least one graph step with a service name is required.');
+          return;
+        }
+      }
     }
     setIsSaving(true);
     try {
@@ -382,13 +407,66 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
           onClick={() =>
             patchDraft((next) => writeStringList(next, 'spec.predictor.model.args', [...args, '']))
           }
-          style={{
-            paddingLeft: 0,
-            marginTop: '0.25rem',
-            color: 'var(--pf-t--global--color--brand--default, #0066cc)',
-          }}
+          style={addLinkStyle}
         >
           Add argument
+        </Button>
+      </FormGroup>
+      <FormGroup label="Env" fieldId="kserve-env">
+        {env.map((item, index) => (
+          <Flex
+            key={`env-${index}`}
+            alignItems={{ default: 'alignItemsFlexEnd' }}
+            spaceItems={{ default: 'spaceItemsSm' }}
+            style={{ marginTop: index === 0 ? 0 : '0.5rem' }}
+          >
+            <FlexItem grow={{ default: 'grow' }}>
+              <TextInput
+                id={`kserve-env-name-${index}`}
+                value={item.name}
+                onChange={(_event, value) => {
+                  const nextEnv: EnvDraft[] = env.map((entry, entryIndex) =>
+                    entryIndex === index ? { ...entry, name: value } : entry,
+                  );
+                  patchDraft((next) => writeEnv(next, nextEnv));
+                }}
+                placeholder="NAME"
+                aria-label={`Env name ${index + 1}`}
+              />
+            </FlexItem>
+            <FlexItem grow={{ default: 'grow' }}>
+              <TextInput
+                id={`kserve-env-value-${index}`}
+                value={item.value}
+                onChange={(_event, value) => {
+                  const nextEnv: EnvDraft[] = env.map((entry, entryIndex) =>
+                    entryIndex === index ? { ...entry, value } : entry,
+                  );
+                  patchDraft((next) => writeEnv(next, nextEnv));
+                }}
+                placeholder="value"
+                aria-label={`Env value ${index + 1}`}
+              />
+            </FlexItem>
+            <FlexItem>
+              <Button
+                variant="plain"
+                icon={<MinusCircleIcon />}
+                onClick={() =>
+                  patchDraft((next) => writeEnv(next, env.filter((_entry, entryIndex) => entryIndex !== index)))
+                }
+                aria-label={`Remove env ${index + 1}`}
+              />
+            </FlexItem>
+          </Flex>
+        ))}
+        <Button
+          variant="link"
+          icon={<PlusCircleIcon />}
+          onClick={() => patchDraft((next) => writeEnv(next, [...env, { name: '', value: '' }]))}
+          style={addLinkStyle}
+        >
+          Add env
         </Button>
       </FormGroup>
       <FormGroup role="radiogroup" label="Model location" isRequired fieldId="kserve-storage-mode">
@@ -572,16 +650,206 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
           onClick={() =>
             patchDraft((next) => writePorts(next, [...ports, { containerPort: '', name: '', protocol: 'TCP' }]))
           }
-          style={{
-            paddingLeft: 0,
-            marginTop: '0.25rem',
-            color: 'var(--pf-t--global--color--brand--default, #0066cc)',
-          }}
+          style={addLinkStyle}
         >
           Add port
         </Button>
       </FormGroup>
     </>
+  );
+
+  const renderInferenceGraphBasics = () => (
+    <>
+      <FormGroup label="Steps" isRequired fieldId="kserve-graph-steps">
+        {graphSteps.map((step, index) => (
+          <div
+            key={`step-${index}`}
+            style={{
+              marginTop: index === 0 ? 0 : '0.75rem',
+              padding: '0.75rem',
+              border: '1px solid var(--pf-t--global--border--color--default, #a2a9b4)',
+              borderRadius: '8px',
+            }}
+          >
+            <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }}>
+              <FlexItem>
+                <strong>Step {index + 1}</strong>
+              </FlexItem>
+              <FlexItem>
+                <Button
+                  variant="plain"
+                  icon={<MinusCircleIcon />}
+                  onClick={() =>
+                    patchDraft((next) =>
+                      writeGraphSteps(
+                        next,
+                        graphSteps.filter((_item, itemIndex) => itemIndex !== index),
+                      ),
+                    )
+                  }
+                  aria-label={`Remove step ${index + 1}`}
+                />
+              </FlexItem>
+            </Flex>
+            <FormGroup label="Service name" isRequired fieldId={`kserve-step-service-${index}`}>
+              <TextInput
+                id={`kserve-step-service-${index}`}
+                value={step.serviceName}
+                onChange={(_event, value) => {
+                  const nextSteps: GraphStepDraft[] = graphSteps.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, serviceName: value } : item,
+                  );
+                  patchDraft((next) => writeGraphSteps(next, nextSteps));
+                }}
+                placeholder="cat-dog-classifier"
+              />
+            </FormGroup>
+            <FormGroup label="Step name" fieldId={`kserve-step-name-${index}`}>
+              <TextInput
+                id={`kserve-step-name-${index}`}
+                value={step.name}
+                onChange={(_event, value) => {
+                  const nextSteps: GraphStepDraft[] = graphSteps.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, name: value } : item,
+                  );
+                  patchDraft((next) => writeGraphSteps(next, nextSteps));
+                }}
+                placeholder="cat_dog_classifier"
+              />
+            </FormGroup>
+            <FormGroup label="Data" fieldId={`kserve-step-data-${index}`}>
+              <TextInput
+                id={`kserve-step-data-${index}`}
+                value={step.data}
+                onChange={(_event, value) => {
+                  const nextSteps: GraphStepDraft[] = graphSteps.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, data: value } : item,
+                  );
+                  patchDraft((next) => writeGraphSteps(next, nextSteps));
+                }}
+                placeholder="$request"
+              />
+            </FormGroup>
+            <FormGroup label="Condition" fieldId={`kserve-step-condition-${index}`}>
+              <TextInput
+                id={`kserve-step-condition-${index}`}
+                value={step.condition}
+                onChange={(_event, value) => {
+                  const nextSteps: GraphStepDraft[] = graphSteps.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, condition: value } : item,
+                  );
+                  patchDraft((next) => writeGraphSteps(next, nextSteps));
+                }}
+                placeholder='[@this].#(predictions.0=="dog")'
+              />
+            </FormGroup>
+          </div>
+        ))}
+        <Button
+          variant="link"
+          icon={<PlusCircleIcon />}
+          onClick={() =>
+            patchDraft((next) =>
+              writeGraphSteps(next, [
+                ...graphSteps,
+                { serviceName: '', name: '', data: '', condition: '', extra: {} },
+              ]),
+            )
+          }
+          style={addLinkStyle}
+        >
+          Add step
+        </Button>
+      </FormGroup>
+      <FormGroup label="Resources" fieldId="kserve-graph-resources">
+        <Flex spaceItems={{ default: 'spaceItemsMd' }} flexWrap={{ default: 'wrap' }}>
+          <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
+            <TextInput
+              id="kserve-graph-cpu-request"
+              value={specResourceValue(draft, 'requests', 'cpu')}
+              onChange={(_event, value) =>
+                patchDraft((next) => writeSpecResourceValue(next, 'requests', 'cpu', value))
+              }
+              placeholder="CPU request"
+              aria-label="CPU request"
+            />
+          </FlexItem>
+          <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
+            <TextInput
+              id="kserve-graph-memory-request"
+              value={specResourceValue(draft, 'requests', 'memory')}
+              onChange={(_event, value) =>
+                patchDraft((next) => writeSpecResourceValue(next, 'requests', 'memory', value))
+              }
+              placeholder="Memory request"
+              aria-label="Memory request"
+            />
+          </FlexItem>
+        </Flex>
+        <Flex spaceItems={{ default: 'spaceItemsMd' }} flexWrap={{ default: 'wrap' }} style={{ marginTop: '0.5rem' }}>
+          <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
+            <TextInput
+              id="kserve-graph-cpu-limit"
+              value={specResourceValue(draft, 'limits', 'cpu')}
+              onChange={(_event, value) =>
+                patchDraft((next) => writeSpecResourceValue(next, 'limits', 'cpu', value))
+              }
+              placeholder="CPU limit"
+              aria-label="CPU limit"
+            />
+          </FlexItem>
+          <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
+            <TextInput
+              id="kserve-graph-memory-limit"
+              value={specResourceValue(draft, 'limits', 'memory')}
+              onChange={(_event, value) =>
+                patchDraft((next) => writeSpecResourceValue(next, 'limits', 'memory', value))
+              }
+              placeholder="Memory limit"
+              aria-label="Memory limit"
+            />
+          </FlexItem>
+        </Flex>
+      </FormGroup>
+    </>
+  );
+
+  const renderWorkerSpec = () => (
+    <FormGroup label="Worker spec" fieldId="kserve-worker-spec">
+      <FormHelperText>
+        <HelperText>
+          <HelperTextItem>
+            Used for multi-node serving. Remaining workerSpec keys can be set in the YAML editor.
+          </HelperTextItem>
+        </HelperText>
+      </FormHelperText>
+      <Flex spaceItems={{ default: 'spaceItemsMd' }} flexWrap={{ default: 'wrap' }} style={{ marginTop: '0.5rem' }}>
+        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
+          <TextInput
+            id="kserve-pipeline-parallel"
+            type="number"
+            value={workerSpecNumber(draft, 'pipelineParallelSize')}
+            onChange={(_event, value) =>
+              patchDraft((next) => writeWorkerSpecNumber(next, 'pipelineParallelSize', value))
+            }
+            placeholder="Pipeline parallel size"
+            aria-label="Pipeline parallel size"
+          />
+        </FlexItem>
+        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
+          <TextInput
+            id="kserve-tensor-parallel"
+            type="number"
+            value={workerSpecNumber(draft, 'tensorParallelSize')}
+            onChange={(_event, value) =>
+              patchDraft((next) => writeWorkerSpecNumber(next, 'tensorParallelSize', value))
+            }
+            placeholder="Tensor parallel size"
+            aria-label="Tensor parallel size"
+          />
+        </FlexItem>
+      </Flex>
+    </FormGroup>
   );
 
   return (
@@ -653,6 +921,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
             <>
               {renderCatalogFields('basic')}
               {kind.kind === 'InferenceService' ? renderInferenceServiceBasics() : null}
+              {kind.kind === 'InferenceGraph' ? renderInferenceGraphBasics() : null}
               <div style={{ marginTop: '1rem' }}>
                 <ExpandableSection
                   toggleText="Advanced"
@@ -660,6 +929,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                   onToggle={(_event, expanded) => setAdvancedOpen(expanded)}
                 >
                   {renderCatalogFields('advanced')}
+                  {kind.kind === 'InferenceService' ? renderWorkerSpec() : null}
                 </ExpandableSection>
               </div>
             </>

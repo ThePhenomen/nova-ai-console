@@ -35,6 +35,19 @@ export type PortDraft = {
   protocol: string;
 };
 
+export type EnvDraft = {
+  name: string;
+  value: string;
+};
+
+export type GraphStepDraft = {
+  serviceName: string;
+  name: string;
+  data: string;
+  condition: string;
+  extra: Record<string, unknown>;
+};
+
 export const emptyResource = (kind: KindCatalog, namespace: string): KServeResource => {
   const metadata = { name: '', namespace };
   if (kind.kind === 'InferenceGraph') {
@@ -67,16 +80,24 @@ export const emptyResource = (kind: KindCatalog, namespace: string): KServeResou
   };
 };
 
-export const ensureModel = (resource: KServeResource): Record<string, unknown> => {
+export const ensureSpec = (resource: KServeResource): Record<string, unknown> => {
   const root = resource as unknown as Record<string, unknown>;
   if (!asRecord(root.spec)) {
     root.spec = {};
   }
-  const spec = root.spec as Record<string, unknown>;
+  return root.spec as Record<string, unknown>;
+};
+
+export const ensurePredictor = (resource: KServeResource): Record<string, unknown> => {
+  const spec = ensureSpec(resource);
   if (!asRecord(spec.predictor)) {
     spec.predictor = {};
   }
-  const predictor = spec.predictor as Record<string, unknown>;
+  return spec.predictor as Record<string, unknown>;
+};
+
+export const ensureModel = (resource: KServeResource): Record<string, unknown> => {
+  const predictor = ensurePredictor(resource);
   if (!asRecord(predictor.model)) {
     predictor.model = {};
   }
@@ -196,6 +217,180 @@ export const writeResourceValue = (
   }
 };
 
+export const writeSpecResourceValue = (
+  resource: KServeResource,
+  side: 'requests' | 'limits',
+  name: string,
+  raw: string,
+): void => {
+  const spec = ensureSpec(resource);
+  let resources = asRecord(spec.resources);
+  if (!resources) {
+    resources = {};
+    spec.resources = resources;
+  }
+  let bucket = asRecord(resources[side]);
+  if (!bucket) {
+    bucket = {};
+    resources[side] = bucket;
+  }
+  if (raw.trim() === '') {
+    delete bucket[name];
+  } else {
+    bucket[name] = raw.trim();
+  }
+  if (Object.keys(bucket).length === 0) {
+    delete resources[side];
+  }
+  if (Object.keys(resources).length === 0) {
+    delete spec.resources;
+  }
+};
+
+export const specResourceValue = (
+  resource: KServeResource,
+  side: 'requests' | 'limits',
+  name: string,
+): string => {
+  const resources = asRecord(asRecord(resource.spec)?.resources);
+  const bucket = asRecord(resources?.[side]);
+  const value = bucket?.[name];
+  return value === undefined || value === null ? '' : String(value);
+};
+
+export const readEnv = (resource: KServeResource): EnvDraft[] => {
+  const value = getAt(resource, 'spec.predictor.model.env');
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((item) => {
+    const env = asRecord(item);
+    return {
+      name: typeof env?.name === 'string' ? env.name : '',
+      value: typeof env?.value === 'string' ? env.value : '',
+    };
+  });
+};
+
+export const writeEnv = (resource: KServeResource, env: EnvDraft[]): void => {
+  const nextEnv = env.map((item) => {
+    const next: Record<string, unknown> = {};
+    if (item.name.trim() !== '') {
+      next.name = item.name.trim();
+    }
+    if (item.value !== '') {
+      next.value = item.value;
+    }
+    return next;
+  });
+  setAt(
+    resource as unknown as Record<string, unknown>,
+    'spec.predictor.model.env',
+    nextEnv.length > 0 ? nextEnv : undefined,
+  );
+};
+
+export const sanitizeEnv = (resource: KServeResource): void => {
+  writeEnv(
+    resource,
+    readEnv(resource).filter((item) => item.name.trim() !== ''),
+  );
+};
+
+export const readGraphSteps = (resource: KServeResource): GraphStepDraft[] => {
+  const value = getAt(resource, 'spec.nodes.root.steps');
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((item) => {
+    const step = asRecord(item) ?? {};
+    const { serviceName, name, data, condition, ...extra } = step;
+    return {
+      serviceName: typeof serviceName === 'string' ? serviceName : '',
+      name: typeof name === 'string' ? name : '',
+      data: typeof data === 'string' ? data : '',
+      condition: typeof condition === 'string' ? condition : '',
+      extra,
+    };
+  });
+};
+
+export const writeGraphSteps = (resource: KServeResource, steps: GraphStepDraft[]): void => {
+  const spec = ensureSpec(resource);
+  let nodes = asRecord(spec.nodes);
+  if (!nodes) {
+    nodes = {};
+    spec.nodes = nodes;
+  }
+  let root = asRecord(nodes.root);
+  if (!root) {
+    root = { routerType: 'Sequence' };
+    nodes.root = root;
+  }
+  root.steps = steps.map((step) => {
+    const next: Record<string, unknown> = { ...step.extra };
+    if (step.serviceName.trim() !== '') {
+      next.serviceName = step.serviceName.trim();
+    } else {
+      delete next.serviceName;
+    }
+    if (step.name.trim() !== '') {
+      next.name = step.name.trim();
+    } else {
+      delete next.name;
+    }
+    if (step.data.trim() !== '') {
+      next.data = step.data.trim();
+    } else {
+      delete next.data;
+    }
+    if (step.condition.trim() !== '') {
+      next.condition = step.condition.trim();
+    } else {
+      delete next.condition;
+    }
+    return next;
+  });
+};
+
+export const sanitizeGraphSteps = (resource: KServeResource): void => {
+  writeGraphSteps(
+    resource,
+    readGraphSteps(resource).filter(
+      (step) =>
+        step.serviceName.trim() !== '' ||
+        step.name.trim() !== '' ||
+        step.data.trim() !== '' ||
+        step.condition.trim() !== '' ||
+        Object.keys(step.extra).length > 0,
+    ),
+  );
+};
+
+export const writeWorkerSpecNumber = (resource: KServeResource, key: string, raw: string): void => {
+  const predictor = ensurePredictor(resource);
+  let workerSpec = asRecord(predictor.workerSpec);
+  if (!workerSpec) {
+    workerSpec = {};
+    predictor.workerSpec = workerSpec;
+  }
+  const parsed = Number(raw);
+  if (raw.trim() === '' || Number.isNaN(parsed)) {
+    delete workerSpec[key];
+  } else {
+    workerSpec[key] = parsed;
+  }
+  if (Object.keys(workerSpec).length === 0) {
+    delete predictor.workerSpec;
+  }
+};
+
+export const workerSpecNumber = (resource: KServeResource, key: string): string => {
+  const workerSpec = asRecord(asRecord(asRecord(resource.spec)?.predictor)?.workerSpec);
+  const value = workerSpec?.[key];
+  return value === undefined || value === null ? '' : String(value);
+};
+
 export const setStorageMode = (resource: KServeResource, mode: StorageMode): void => {
   const model = ensureModel(resource);
   if (mode === 'uri') {
@@ -298,19 +493,20 @@ export const prepareForSave = (resource: KServeResource): KServeResource => {
     .map((item) => item.trim())
     .filter((item) => item !== '');
   writeStringList(next, 'spec.predictor.model.args', args);
+  sanitizeEnv(next);
   sanitizePorts(next);
+  sanitizeGraphSteps(next);
   const model = asRecord(asRecord(asRecord(next.spec)?.predictor)?.model);
-  if (!model) {
-    return next;
-  }
-  if (storageModeOf(next) === 'storage') {
-    delete model.storageUri;
-    const storage = asRecord(model.storage);
-    if (storage && !storage.key && !storage.path) {
+  if (model) {
+    if (storageModeOf(next) === 'storage') {
+      delete model.storageUri;
+      const storage = asRecord(model.storage);
+      if (storage && !storage.key && !storage.path) {
+        delete model.storage;
+      }
+    } else {
       delete model.storage;
     }
-  } else {
-    delete model.storage;
   }
   return next;
 };
