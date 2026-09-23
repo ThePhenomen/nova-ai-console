@@ -13,6 +13,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { hasProjectService } from '../../auth/access';
 import { usePlatformAccess } from '../../auth/usePlatformAccess';
 import { PIPELINES_SERVICE } from '../../consoleServices';
+import DeploymentsTab from './tabs/DeploymentsTab';
 import OverviewTab from './tabs/OverviewTab';
 import PermissionsTab from './tabs/PermissionsTab';
 import PlaceholderTab from './tabs/PlaceholderTab';
@@ -117,12 +118,7 @@ const ProjectDetails: React.FC = () => {
       {activeTab === 'pipelines' ? (
         <PlaceholderTab title="Pipelines" description="Pipelines in this project will appear here." />
       ) : null}
-      {activeTab === 'deployments' ? (
-        <PlaceholderTab
-          title="Deployments"
-          description="Model deployments in this project will appear here."
-        />
-      ) : null}
+      {activeTab === 'deployments' ? <DeploymentsTab projectName={projectName} /> : null}
       {activeTab === 'roles' ? <RolesTab projectName={projectName} /> : null}
       {activeTab === 'permissions' ? <PermissionsTab projectName={projectName} /> : null}
     </>

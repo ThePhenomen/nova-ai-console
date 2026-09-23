@@ -23,7 +23,7 @@ export const CONSOLE_NAV_SERVICES: ConsoleNavService[] = [
     id: 'deployments',
     title: 'Deployments',
     href: '/deployments',
-    description: 'Model deployments will appear here.',
+    description: 'KServe InferenceServices in your projects.',
   },
 ];
 
