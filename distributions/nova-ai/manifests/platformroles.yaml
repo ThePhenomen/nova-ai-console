@@ -38,7 +38,24 @@ spec:
     applications:
       - nova-ai-console
 ---
-# Optional one-tab roles for granular grants. Same *-enabled labels as above.
+# Read-only counterpart of nova-ai-developer.
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRole
+metadata:
+  name: nova-ai-viewer
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/experiments-enabled: "true"
+    nova-ai.io/workbench-enabled: "true"
+spec:
+  kubernetes:
+    clusterRoleSelectors:
+      - matchLabels:
+          nova-ai.io/aggregate-to-viewer: "true"
+  oidc:
+    applications:
+      - nova-ai-console
+---
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRole
 metadata:

@@ -6,11 +6,11 @@ import {
   Checkbox,
   EmptyState,
   EmptyStateBody,
-  Flex,
-  FlexItem,
   Form,
   FormGroup,
   FormHelperText,
+  FormSelect,
+  FormSelectOption,
   HelperText,
   HelperTextItem,
   PageSection,
@@ -20,14 +20,15 @@ import {
   ToolbarContent,
   ToolbarItem,
 } from '@patternfly/react-core';
-import { MinusCircleIcon, PlusCircleIcon } from '@patternfly/react-icons';
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import {
   CONSOLE_OIDC_APPLICATION,
   CONSOLE_PERSONA_LABEL,
+  KUBERNETES_ACCESS_PRESETS,
   canonicalConsoleService,
-  consoleRoleFromPlatformRole,
+  kubernetesAccessFromRole,
   servicesFromRole,
+  type KubernetesAccessLevel,
 } from '../../../auth/access';
 import {
   createPlatformRole,
@@ -44,12 +45,12 @@ type RolesTabProps = {
   projectName: string;
 };
 
-type SelectorRow = {
-  key: string;
-  value: string;
-};
-
-const emptySelector = (): SelectorRow => ({ key: '', value: '' });
+const ACCESS_OPTIONS = (Object.keys(KUBERNETES_ACCESS_PRESETS) as Array<
+  Exclude<KubernetesAccessLevel, 'none'>
+>).map((id) => ({
+  id,
+  title: KUBERNETES_ACCESS_PRESETS[id].title,
+}));
 
 const formatList = (values: string[]): string => (values.length > 0 ? values.join(', ') : '—');
 
@@ -62,14 +63,6 @@ const formatServices = (values: string[]): string =>
     ),
   );
 
-const selectorsFromRows = (
-  rows: SelectorRow[],
-): Array<{ matchLabels: Record<string, string> }> =>
-  rows
-    .map((row) => ({ key: row.key.trim(), value: row.value.trim() }))
-    .filter((row) => row.key !== '' && row.value !== '')
-    .map((row) => ({ matchLabels: { [row.key]: row.value } }));
-
 const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const [roles, setRoles] = React.useState<PlatformRoleKind[]>([]);
   const [boundRoleNames, setBoundRoleNames] = React.useState<Set<string>>(new Set());
@@ -78,8 +71,8 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
   const [name, setName] = React.useState('');
-  const [isAdminUi, setIsAdminUi] = React.useState(false);
-  const [selectors, setSelectors] = React.useState<SelectorRow[]>([emptySelector()]);
+  const [accessLevel, setAccessLevel] =
+    React.useState<Exclude<KubernetesAccessLevel, 'none'>>('developer');
   const [enabledServices, setEnabledServices] = React.useState<string[]>([]);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
 
@@ -127,8 +120,7 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
 
   const resetForm = () => {
     setName('');
-    setIsAdminUi(false);
-    setSelectors([emptySelector()]);
+    setAccessLevel('developer');
     setEnabledServices([]);
     setIsFormOpen(false);
     setFormError(null);
@@ -142,14 +134,17 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
       setFormError('Role name is required.');
       return;
     }
+    const preset = KUBERNETES_ACCESS_PRESETS[accessLevel];
     const labels: Record<string, string> = { ...consoleScopeLabels() };
-    if (isAdminUi) {
-      labels[CONSOLE_PERSONA_LABEL] = 'admin';
+    if (preset.persona) {
+      labels[CONSOLE_PERSONA_LABEL] = preset.persona;
     }
     enabledServices.forEach((serviceId) => {
       labels[consoleServiceEnabledLabel(serviceId)] = 'true';
     });
-    const clusterRoleSelectors = selectorsFromRows(selectors);
+    const clusterRoleSelectors = preset.selectors.map((key) => ({
+      matchLabels: { [key]: 'true' },
+    }));
     setIsSaving(true);
     try {
       await createPlatformRole({
@@ -230,78 +225,24 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
               isRequired
             />
           </FormGroup>
-          <FormGroup fieldId="create-role-admin-ui">
-            <Checkbox
-              id="create-role-admin-ui"
-              label="Admin in console"
-              description="Adds nova-ai.io/console-persona: admin. Bound users can create projects and manage Roles/Permissions."
-              isChecked={isAdminUi}
-              onChange={(_event, checked) => setIsAdminUi(checked)}
-            />
-          </FormGroup>
-          <FormGroup label="Cluster role selectors" fieldId="create-role-selectors">
-            {selectors.map((row, index) => (
-              <Flex
-                key={`selector-${index}`}
-                spaceItems={{ default: 'spaceItemsSm' }}
-                style={{ marginBottom: '0.5rem' }}
-              >
-                <FlexItem flex={{ default: 'flex_1' }}>
-                  <TextInput
-                    aria-label={`Selector ${index + 1} key`}
-                    value={row.key}
-                    onChange={(_event, value) =>
-                      setSelectors((current) =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, key: value } : item,
-                        ),
-                      )
-                    }
-                    placeholder="nova-ai.io/aggregate-to-developer"
-                  />
-                </FlexItem>
-                <FlexItem flex={{ default: 'flex_1' }}>
-                  <TextInput
-                    aria-label={`Selector ${index + 1} value`}
-                    value={row.value}
-                    onChange={(_event, value) =>
-                      setSelectors((current) =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, value } : item,
-                        ),
-                      )
-                    }
-                    placeholder="true"
-                  />
-                </FlexItem>
-                <FlexItem>
-                  <Button
-                    variant="plain"
-                    icon={<MinusCircleIcon />}
-                    onClick={() =>
-                      setSelectors((current) =>
-                        current.length === 1
-                          ? [emptySelector()]
-                          : current.filter((_, itemIndex) => itemIndex !== index),
-                      )
-                    }
-                    aria-label={`Remove selector ${index + 1}`}
-                  />
-                </FlexItem>
-              </Flex>
-            ))}
-            <Button
-              variant="link"
-              icon={<PlusCircleIcon />}
-              onClick={() => setSelectors((current) => [...current, emptySelector()])}
+          <FormGroup label="Kubernetes access" isRequired fieldId="create-role-access">
+            <FormSelect
+              id="create-role-access"
+              value={accessLevel}
+              onChange={(_event, value) =>
+                setAccessLevel(value as Exclude<KubernetesAccessLevel, 'none'>)
+              }
+              aria-label="Kubernetes access"
             >
-              Add selector
-            </Button>
+              {ACCESS_OPTIONS.map((option) => (
+                <FormSelectOption key={option.id} value={option.id} label={option.title} />
+              ))}
+            </FormSelect>
             <FormHelperText>
               <HelperText>
                 <HelperTextItem>
-                  Each row becomes one `matchLabels` entry in spec.kubernetes.clusterRoleSelectors.
-                  Leave empty for an OIDC-only role.
+                  Admin can create projects and manage roles. Developer has full access to project
+                  KServe and Ray resources. Viewer has the same resources, read-only.
                 </HelperTextItem>
               </HelperText>
             </FormHelperText>
@@ -312,7 +253,6 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
                 key={service.id}
                 id={`create-role-service-${service.id}`}
                 label={service.title}
-                description={`Adds ${consoleServiceEnabledLabel(service.id)}: "true"`}
                 isChecked={enabledServices.includes(service.id)}
                 onChange={(_event, checked) =>
                   setEnabledServices((current) =>
@@ -361,11 +301,13 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
           </Thead>
           <Tbody>
             {roles.map((role) => {
-              const access = consoleRoleFromPlatformRole(role);
+              const access = kubernetesAccessFromRole(role);
               return (
                 <Tr key={role.metadata.name}>
                   <Td dataLabel="Name">{role.metadata.name}</Td>
-                  <Td dataLabel="Console access">{access === 'none' ? 'service' : access}</Td>
+                  <Td dataLabel="Console access">
+                    {access === 'none' ? '—' : KUBERNETES_ACCESS_PRESETS[access].title}
+                  </Td>
                   <Td dataLabel="Console services">{formatServices(servicesFromRole(role))}</Td>
                   <Td dataLabel="OIDC applications">
                     {formatList(role.spec?.oidc?.applications ?? [])}

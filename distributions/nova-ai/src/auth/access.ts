@@ -15,12 +15,15 @@ export const CONSOLE_SERVICE_LABEL = 'nova-ai.io/console-service';
 export const CONSOLE_SERVICE_ENABLED = /^nova-ai\.io\/(.+)-enabled$/;
 export const CONSOLE_PERSONA_LABEL = 'nova-ai.io/console-persona';
 export const CONSOLE_OIDC_APPLICATION = 'nova-ai-console';
+export const ADMIN_AGGREGATE_LABEL = 'nova-ai.io/aggregate-to-admin';
 export const CONTRIBUTOR_AGGREGATE_LABEL = 'nova-ai.io/aggregate-to-developer';
+export const VIEWER_AGGREGATE_LABEL = 'nova-ai.io/aggregate-to-viewer';
 
 const ROLE_RANK: Record<ConsoleRole, number> = {
   none: 0,
-  contributor: 1,
-  admin: 2,
+  viewer: 1,
+  contributor: 2,
+  admin: 3,
 };
 
 const OIDC_AUTH_PREFIX = 'oidc-auth-';
@@ -207,8 +210,30 @@ const selectorHas = (role: PlatformRoleKind, label: string): boolean =>
     (selector) => selector.matchLabels?.[label] === 'true',
   );
 
+export type KubernetesAccessLevel = 'admin' | 'developer' | 'viewer' | 'none';
+
+export const KUBERNETES_ACCESS_PRESETS: Record<
+  Exclude<KubernetesAccessLevel, 'none'>,
+  { title: string; persona?: 'admin'; selectors: string[] }
+> = {
+  admin: {
+    title: 'Admin',
+    persona: 'admin',
+    selectors: [CONTRIBUTOR_AGGREGATE_LABEL, ADMIN_AGGREGATE_LABEL],
+  },
+  developer: {
+    title: 'Developer',
+    selectors: [CONTRIBUTOR_AGGREGATE_LABEL],
+  },
+  viewer: {
+    title: 'Viewer',
+    selectors: [VIEWER_AGGREGATE_LABEL],
+  },
+};
+
 export const roleGrantsAdmin = (role: PlatformRoleKind): boolean =>
-  role.metadata.labels?.[CONSOLE_PERSONA_LABEL] === 'admin';
+  role.metadata.labels?.[CONSOLE_PERSONA_LABEL] === 'admin' ||
+  selectorHas(role, ADMIN_AGGREGATE_LABEL);
 
 export const roleGrantsContributor = (role: PlatformRoleKind): boolean =>
   !roleGrantsAdmin(role) &&
@@ -216,12 +241,33 @@ export const roleGrantsContributor = (role: PlatformRoleKind): boolean =>
     role.metadata.name === 'nova-ai-developer' ||
     selectorHas(role, CONTRIBUTOR_AGGREGATE_LABEL));
 
+export const roleGrantsViewer = (role: PlatformRoleKind): boolean =>
+  !roleGrantsAdmin(role) &&
+  !roleGrantsContributor(role) &&
+  (role.metadata.name === 'nova-ai-viewer' || selectorHas(role, VIEWER_AGGREGATE_LABEL));
+
 export const consoleRoleFromPlatformRole = (role: PlatformRoleKind): ConsoleRole => {
   if (roleGrantsAdmin(role)) {
     return 'admin';
   }
   if (roleGrantsContributor(role)) {
     return 'contributor';
+  }
+  if (roleGrantsViewer(role)) {
+    return 'viewer';
+  }
+  return 'none';
+};
+
+export const kubernetesAccessFromRole = (role: PlatformRoleKind): KubernetesAccessLevel => {
+  if (roleGrantsAdmin(role)) {
+    return 'admin';
+  }
+  if (roleGrantsContributor(role)) {
+    return 'developer';
+  }
+  if (roleGrantsViewer(role)) {
+    return 'viewer';
   }
   return 'none';
 };
@@ -260,7 +306,7 @@ const emptyProjectAccess = (): ProjectAccess => ({
 const projectAccessFrom = (role: ConsoleRole, services: string[]): ProjectAccess => ({
   role,
   canView: role !== 'none',
-  canEdit: role !== 'none',
+  canEdit: role === 'contributor' || role === 'admin',
   canManageRbac: role === 'admin',
   services: unique(services),
 });
@@ -296,13 +342,10 @@ export type AccessInput = {
 };
 
 /**
- * UI admin vs contributor is `nova-ai.io/console-persona: admin` on the bound
- * PlatformRole. Without that label the console is contributor: Projects is
- * always in the nav, extra sidebar and project tabs come from
+ * UI admin vs contributor vs viewer comes from kubernetes aggregation plus
+ * `nova-ai.io/console-persona: admin`. Extra sidebar and project tabs come from
  * nova-ai.io/<tab>-enabled: "true" (for example nova-ai.io/experiments-enabled),
- * and kubernetes.target still decides which
- * namespaces are listed.
- * Kubernetes aggregation selectors are independent of the console label.
+ * and kubernetes.target still decides which namespaces are listed.
  */
 export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
   const rolesByName = new Map(input.roles.map((role) => [role.metadata.name, role]));

@@ -1,6 +1,6 @@
 import type { K8sObjectMeta } from '../cluster/types';
 
-export type ConsoleRole = 'none' | 'contributor' | 'admin';
+export type ConsoleRole = 'none' | 'viewer' | 'contributor' | 'admin';
 
 export type OidcConfig = {
   issuer: string;
