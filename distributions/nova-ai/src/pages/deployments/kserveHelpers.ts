@@ -1,4 +1,10 @@
-import type { InferenceServiceFormValues, InferenceServiceKind, PredictorModel } from './types';
+import type { FieldDef, KindCatalog, KServeResource } from './crdCatalog';
+import { getAt, setAt } from './manifest';
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 
 const PREDICTOR_META_KEYS = new Set([
   'minReplicas',
@@ -21,78 +27,137 @@ const PREDICTOR_META_KEYS = new Set([
   'model',
 ]);
 
-const asRecord = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+export const emptyResource = (kind: KindCatalog, namespace: string): KServeResource => {
+  const metadata =
+    kind.scope === 'Namespaced' ? { name: '', namespace } : { name: '' };
+  if (kind.kind === 'InferenceService') {
+    return {
+      apiVersion: kind.apiVersion,
+      kind: kind.kind,
+      metadata,
+      spec: {
+        predictor: {
+          minReplicas: 1,
+          model: {
+            modelFormat: { name: 'sklearn' },
+            resources: { requests: { cpu: '100m', memory: '256Mi' } },
+          },
+        },
+      },
+    };
+  }
+  if (kind.kind === 'InferenceGraph') {
+    return {
+      apiVersion: kind.apiVersion,
+      kind: kind.kind,
+      metadata,
+      spec: {
+        nodes: {
+          root: {
+            routerType: 'Sequence',
+            steps: [{ serviceName: '' }],
+          },
+        },
+      },
+    };
+  }
+  return {
+    apiVersion: kind.apiVersion,
+    kind: kind.kind,
+    metadata,
+    spec: {
+      modelSize: '1Gi',
+      nodeGroups: [],
+      sourceModelUri: '',
+    },
+  };
+};
 
-export const predictorType = (service: InferenceServiceKind): string => {
-  const predictor = service.spec?.predictor;
+export const fieldToString = (resource: KServeResource, field: FieldDef): string => {
+  const value = getAt(resource, field.path);
+  if (field.type === 'stringList') {
+    return Array.isArray(value) ? value.map(String).filter((item) => item !== '').join(', ') : '';
+  }
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return String(value);
+};
+
+export const applyField = (resource: KServeResource, field: FieldDef, raw: string): void => {
+  const target = resource as unknown as Record<string, unknown>;
+  if (field.type === 'number') {
+    const parsed = Number(raw);
+    setAt(target, field.path, raw.trim() === '' || Number.isNaN(parsed) ? undefined : parsed);
+    return;
+  }
+  if (field.type === 'stringList') {
+    const items = raw
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item !== '');
+    setAt(target, field.path, items.length > 0 ? items : undefined);
+    return;
+  }
+  setAt(target, field.path, raw.trim() === '' ? undefined : raw);
+};
+
+export const predictorType = (resource: KServeResource): string => {
+  const predictor = asRecord(asRecord(resource.spec)?.predictor);
   if (!predictor) {
     return '—';
   }
-  const format = predictor.model?.modelFormat?.name?.trim();
-  if (format) {
+  const model = asRecord(predictor.model);
+  const format = asRecord(model?.modelFormat)?.name;
+  if (typeof format === 'string' && format.trim() !== '') {
     return format;
   }
   const framework = Object.keys(predictor).find((key) => !PREDICTOR_META_KEYS.has(key));
   return framework ?? '—';
 };
 
-export const storageUriOf = (service: InferenceServiceKind): string => {
-  const predictor = service.spec?.predictor;
-  if (!predictor) {
-    return '—';
+export const storageUriOf = (resource: KServeResource): string => {
+  const predictor = asRecord(asRecord(resource.spec)?.predictor);
+  const modelUri = asRecord(predictor?.model)?.storageUri;
+  if (typeof modelUri === 'string' && modelUri.trim() !== '') {
+    return modelUri;
   }
-  if (predictor.model?.storageUri) {
-    return predictor.model.storageUri;
-  }
-  const framework = predictorType(service);
-  const impl = asRecord(predictor[framework]);
-  const uri = impl?.storageUri;
-  return typeof uri === 'string' && uri.trim() !== '' ? uri : '—';
+  return '—';
 };
 
-export const readyStatus = (service: InferenceServiceKind): 'True' | 'False' | 'Unknown' => {
-  const ready = service.status?.conditions?.find((condition) => condition.type === 'Ready');
+export const readyStatus = (resource: KServeResource): 'True' | 'False' | 'Unknown' => {
+  const ready = resource.status?.conditions?.find((condition) => condition.type === 'Ready');
   if (ready?.status === 'True' || ready?.status === 'False') {
     return ready.status;
   }
   return 'Unknown';
 };
 
-export const serviceUrl = (service: InferenceServiceKind): string =>
-  service.status?.url ||
-  service.status?.address?.url ||
-  service.status?.components?.predictor?.url ||
-  '';
-
-export const formValuesFromService = (service: InferenceServiceKind): InferenceServiceFormValues => {
-  const predictor = service.spec?.predictor;
-  const model = predictor?.model;
-  const framework = predictorType(service);
-  const impl = framework !== '—' ? asRecord(predictor?.[framework]) : undefined;
-  const resources = model?.resources?.requests ?? asRecord(impl?.resources)?.requests;
-  const requests = asRecord(resources);
-  const uri = storageUriOf(service);
-  return {
-    name: service.metadata.name,
-    namespace: service.metadata.namespace ?? '',
-    format: framework === '—' ? 'sklearn' : framework,
-    storageUri: uri === '—' ? '' : uri,
-    runtime: model?.runtime ?? '',
-    minReplicas: String(predictor?.minReplicas ?? 1),
-    cpu: typeof requests?.cpu === 'string' ? requests.cpu : '100m',
-    memory: typeof requests?.memory === 'string' ? requests.memory : '256Mi',
-  };
+export const serviceUrl = (resource: KServeResource): string => {
+  const status = resource.status;
+  if (!status) {
+    return '';
+  }
+  if (status.url) {
+    return status.url;
+  }
+  if (status.address?.url) {
+    return status.address.url;
+  }
+  const components = asRecord(status.components);
+  const predictor = asRecord(components?.predictor);
+  return typeof predictor?.url === 'string' ? predictor.url : '';
 };
 
-export const predictorModelFromForm = (values: InferenceServiceFormValues): PredictorModel => ({
-  modelFormat: { name: values.format.trim() || 'sklearn' },
-  storageUri: values.storageUri.trim(),
-  ...(values.runtime.trim() ? { runtime: values.runtime.trim() } : {}),
-  resources: {
-    requests: {
-      ...(values.cpu.trim() ? { cpu: values.cpu.trim() } : {}),
-      ...(values.memory.trim() ? { memory: values.memory.trim() } : {}),
-    },
-  },
-});
+export const resourceSummary = (kind: KindCatalog, resource: KServeResource): string => {
+  if (kind.kind === 'InferenceService') {
+    return predictorType(resource);
+  }
+  if (kind.kind === 'InferenceGraph') {
+    const nodes = asRecord(asRecord(resource.spec)?.nodes);
+    const count = nodes ? Object.keys(nodes).length : 0;
+    return count === 1 ? '1 node' : `${count} nodes`;
+  }
+  const uri = asRecord(resource.spec)?.sourceModelUri;
+  return typeof uri === 'string' && uri.trim() !== '' ? uri : '—';
+};

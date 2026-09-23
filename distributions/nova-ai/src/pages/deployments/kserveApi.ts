@@ -1,77 +1,65 @@
 import { k8sRequest } from '../../cluster/k8sClient';
 import type { K8sList } from '../../cluster/types';
-import {
-  INFERENCE_SERVICE_API,
-  INFERENCE_SERVICE_KIND,
-  type InferenceServiceFormValues,
-  type InferenceServiceKind,
-} from './types';
-import { predictorModelFromForm } from './kserveHelpers';
+import type { KindCatalog, KServeResource } from './crdCatalog';
+import { cloneResource } from './manifest';
 
-const collectionPath = (namespace: string): string =>
-  `/apis/${INFERENCE_SERVICE_API}/namespaces/${encodeURIComponent(namespace)}/inferenceservices`;
+const collectionPath = (kind: KindCatalog, namespace?: string): string => {
+  const root = `/apis/${kind.group}/${kind.version}`;
+  if (kind.scope === 'Cluster') {
+    return `${root}/${kind.plural}`;
+  }
+  return `${root}/namespaces/${encodeURIComponent(namespace ?? '')}/${kind.plural}`;
+};
 
-const itemPath = (namespace: string, name: string): string =>
-  `${collectionPath(namespace)}/${encodeURIComponent(name)}`;
+const itemPath = (kind: KindCatalog, namespace: string | undefined, name: string): string =>
+  `${collectionPath(kind, namespace)}/${encodeURIComponent(name)}`;
 
-export const listInferenceServices = async (namespace: string): Promise<InferenceServiceKind[]> => {
-  const list = await k8sRequest<K8sList<InferenceServiceKind>>(collectionPath(namespace));
+const writable = (resource: KServeResource, keepVersion: boolean): KServeResource => {
+  const next = cloneResource(resource);
+  delete next.status;
+  if (next.metadata) {
+    const metadata: Record<string, unknown> = { ...next.metadata };
+    delete metadata.managedFields;
+    delete metadata.uid;
+    delete metadata.creationTimestamp;
+    delete metadata.generation;
+    delete metadata.deletionTimestamp;
+    if (!keepVersion) {
+      delete metadata.resourceVersion;
+    }
+    next.metadata = metadata as KServeResource['metadata'];
+  }
+  return next;
+};
+
+export const listKServeResources = async (
+  kind: KindCatalog,
+  namespace?: string,
+): Promise<KServeResource[]> => {
+  const list = await k8sRequest<K8sList<KServeResource>>(collectionPath(kind, namespace));
   return list.items ?? [];
 };
 
-export const getInferenceService = (
-  namespace: string,
-  name: string,
-): Promise<InferenceServiceKind> => k8sRequest<InferenceServiceKind>(itemPath(namespace, name));
-
-export const deleteInferenceService = (namespace: string, name: string): Promise<void> =>
-  k8sRequest(itemPath(namespace, name), { method: 'DELETE' });
-
-const buildSpec = (values: InferenceServiceFormValues): InferenceServiceKind['spec'] => {
-  const minReplicas = Number.parseInt(values.minReplicas, 10);
-  return {
-    predictor: {
-      ...(Number.isFinite(minReplicas) && minReplicas >= 0 ? { minReplicas } : {}),
-      model: predictorModelFromForm(values),
-    },
-  };
-};
-
-export const createInferenceService = async (
-  values: InferenceServiceFormValues,
-): Promise<InferenceServiceKind> => {
-  const body: InferenceServiceKind = {
-    apiVersion: INFERENCE_SERVICE_API,
-    kind: INFERENCE_SERVICE_KIND,
-    metadata: {
-      name: values.name.trim(),
-      namespace: values.namespace.trim(),
-    },
-    spec: buildSpec(values),
-  };
-  return k8sRequest<InferenceServiceKind>(collectionPath(values.namespace.trim()), {
+export const createKServeResource = (
+  kind: KindCatalog,
+  resource: KServeResource,
+): Promise<KServeResource> =>
+  k8sRequest<KServeResource>(collectionPath(kind, resource.metadata.namespace), {
     method: 'POST',
-    body,
+    body: writable(resource, false),
   });
-};
 
-export const updateInferenceService = async (
-  current: InferenceServiceKind,
-  values: InferenceServiceFormValues,
-): Promise<InferenceServiceKind> => {
-  const namespace = current.metadata.namespace ?? values.namespace;
-  const name = current.metadata.name;
-  const next: InferenceServiceKind = {
-    apiVersion: current.apiVersion,
-    kind: current.kind,
-    metadata: current.metadata,
-    spec: {
-      ...current.spec,
-      ...buildSpec(values),
-    },
-  };
-  return k8sRequest<InferenceServiceKind>(itemPath(namespace, name), {
+export const updateKServeResource = (
+  kind: KindCatalog,
+  resource: KServeResource,
+): Promise<KServeResource> =>
+  k8sRequest<KServeResource>(itemPath(kind, resource.metadata.namespace, resource.metadata.name), {
     method: 'PUT',
-    body: next,
+    body: writable(resource, true),
   });
-};
+
+export const deleteKServeResource = (
+  kind: KindCatalog,
+  name: string,
+  namespace?: string,
+): Promise<void> => k8sRequest(itemPath(kind, namespace, name), { method: 'DELETE' });

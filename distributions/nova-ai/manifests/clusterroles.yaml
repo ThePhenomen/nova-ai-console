@@ -27,7 +27,6 @@ rules:
       - inferenceservices
       - llminferenceserviceconfigs
       - llminferenceservices
-      - localmodelcaches
       - localmodelnodes
       - servingruntimes
       - trainedmodels
@@ -39,6 +38,7 @@ rules:
       - clusterservingruntimes
       - clusterstoragecontainers
       - localmodelnodegroups
+      - localmodelcaches
     verbs: ["get", "list", "watch"]
   # Namespaced Ray CRs — full access in the bound namespace.
   - apiGroups: ["ray.io"]
@@ -69,13 +69,13 @@ rules:
       - inferenceservices
       - llminferenceserviceconfigs
       - llminferenceservices
-      - localmodelcaches
       - localmodelnodes
       - servingruntimes
       - trainedmodels
       - clusterservingruntimes
       - clusterstoragecontainers
       - localmodelnodegroups
+      - localmodelcaches
     verbs: ["get", "list", "watch"]
   - apiGroups: ["ray.io"]
     resources:
@@ -106,4 +106,8 @@ rules:
       - platformrolebindings
       - platformroles/status
       - platformrolebindings/status
+    verbs: ["*"]
+  # LocalModelCache is cluster-scoped in crds.yaml.
+  - apiGroups: ["serving.kserve.io"]
+    resources: ["localmodelcaches"]
     verbs: ["*"]
