@@ -1,3 +1,4 @@
+import { CONSOLE_NAV_SERVICE_TITLES, PIPELINES_SERVICE } from '../consoleServices';
 import type {
   AuthUser,
   ConsoleRole,
@@ -260,13 +261,14 @@ const projectAccessFrom = (role: ConsoleRole, services: string[]): ProjectAccess
 });
 
 export const bootstrapAccess = (username?: string): PlatformAccess => {
-  const project = projectAccessFrom('admin', []);
+  const services = [...CONSOLE_NAV_SERVICE_TITLES, PIPELINES_SERVICE];
+  const project = projectAccessFrom('admin', services);
   return {
     source: 'bootstrap',
     consoleRole: 'admin',
     canCreateProjects: true,
     username,
-    services: [],
+    services,
     forProject: () => project,
     canViewProject: () => true,
   };
@@ -291,8 +293,9 @@ export type AccessInput = {
 /**
  * UI admin vs contributor is `nova-ai.io/console-persona: admin` on the bound
  * PlatformRole. Without that label the console is contributor: Projects is
- * always in the nav, extra sidebar tabs come from nova-ai.io/console-service,
- * and kubernetes.target still decides which namespaces are listed.
+ * always in the nav, extra sidebar and project tabs come from
+ * nova-ai.io/console-service, and kubernetes.target still decides which
+ * namespaces are listed.
  * Kubernetes aggregation selectors are independent of the console label.
  */
 export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
@@ -377,6 +380,13 @@ export const normalizeConsoleService = (service: string): string =>
 
 const SERVICE_ALIASES: Record<string, string> = {
   mlflow: 'experiments',
+  experiment: 'experiments',
+  workbenches: 'workbench',
+  notebook: 'workbench',
+  notebooks: 'workbench',
+  deployment: 'deployments',
+  models: 'deployments',
+  pipeline: 'pipelines',
 };
 
 export const canonicalConsoleService = (service: string): string => {

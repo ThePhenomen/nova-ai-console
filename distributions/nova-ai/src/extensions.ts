@@ -18,6 +18,18 @@ const extensions: Extension[] = [
   {
     type: 'app.navigation/href',
     properties: {
+      id: 'workbench',
+      title: 'Workbench',
+      href: '/workbench',
+      path: '/workbench',
+    },
+    flags: {
+      required: ['workbench'],
+    },
+  } satisfies HrefNavItemExtension,
+  {
+    type: 'app.navigation/href',
+    properties: {
       id: 'experiments',
       title: 'Experiments',
       href: '/experiments',
@@ -25,6 +37,18 @@ const extensions: Extension[] = [
     },
     flags: {
       required: ['experiments'],
+    },
+  } satisfies HrefNavItemExtension,
+  {
+    type: 'app.navigation/href',
+    properties: {
+      id: 'deployments',
+      title: 'Deployments',
+      href: '/deployments',
+      path: '/deployments',
+    },
+    flags: {
+      required: ['deployments'],
     },
   } satisfies HrefNavItemExtension,
   {
@@ -37,11 +61,31 @@ const extensions: Extension[] = [
   {
     type: 'app.route',
     properties: {
+      path: '/workbench',
+      component: () => import('./pages/workbench/Workbench'),
+    },
+    flags: {
+      required: ['workbench'],
+    },
+  } satisfies RouteExtension,
+  {
+    type: 'app.route',
+    properties: {
       path: '/experiments',
       component: () => import('./pages/experiments/Experiments'),
     },
     flags: {
       required: ['experiments'],
+    },
+  } satisfies RouteExtension,
+  {
+    type: 'app.route',
+    properties: {
+      path: '/deployments',
+      component: () => import('./pages/deployments/Deployments'),
+    },
+    flags: {
+      required: ['deployments'],
     },
   } satisfies RouteExtension,
   {

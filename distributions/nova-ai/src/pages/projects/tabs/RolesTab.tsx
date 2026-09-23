@@ -308,13 +308,13 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
               id="create-role-services"
               value={services}
               onChange={(_event, value) => setServices(value)}
-              placeholder="Experiments"
+              placeholder="Experiments, Workbench, Deployments"
             />
             <FormHelperText>
               <HelperText>
                 <HelperTextItem>
-                  Optional. Comma-separated sidebar tab names this role unlocks. Projects is always
-                  shown. Example: Experiments.
+                  Optional. Comma-separated tab names this role unlocks in the sidebar and on
+                  projects. Projects is always shown. Example: Experiments, Workbench, Deployments.
                 </HelperTextItem>
               </HelperText>
             </FormHelperText>

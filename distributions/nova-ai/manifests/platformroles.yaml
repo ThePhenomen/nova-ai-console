@@ -33,7 +33,8 @@ spec:
     applications:
       - nova-ai-console
 ---
-# Experiments sidebar is gated on this service label. Projects is always shown.
+# Experiments sidebar and project tab are gated on this service label.
+# Workbench and Deployments work the same way.
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRole
 metadata:
@@ -41,6 +42,30 @@ metadata:
   labels:
     nova-ai.io/console: nova-ai-console
     nova-ai.io/console-service: Experiments
+spec:
+  oidc:
+    applications:
+      - nova-ai-console
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRole
+metadata:
+  name: nova-ai-workbench
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/console-service: Workbench
+spec:
+  oidc:
+    applications:
+      - nova-ai-console
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRole
+metadata:
+  name: nova-ai-deployments
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/console-service: Deployments
 spec:
   oidc:
     applications:

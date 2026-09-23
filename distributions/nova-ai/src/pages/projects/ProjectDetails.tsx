@@ -10,7 +10,9 @@ import {
   TabTitleText,
 } from '@patternfly/react-core';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { hasProjectService } from '../../auth/access';
 import { usePlatformAccess } from '../../auth/usePlatformAccess';
+import { PIPELINES_SERVICE } from '../../consoleServices';
 import OverviewTab from './tabs/OverviewTab';
 import PermissionsTab from './tabs/PermissionsTab';
 import PlaceholderTab from './tabs/PlaceholderTab';
@@ -18,9 +20,10 @@ import RolesTab from './tabs/RolesTab';
 
 export const PROJECT_TABS = [
   { id: 'overview', title: 'Overview' },
-  { id: 'workbench', title: 'Workbench' },
-  { id: 'pipelines', title: 'Pipelines' },
-  { id: 'deployments', title: 'Deployments' },
+  { id: 'workbench', title: 'Workbench', service: 'Workbench' },
+  { id: 'experiments', title: 'Experiments', service: 'Experiments' },
+  { id: 'pipelines', title: 'Pipelines', service: PIPELINES_SERVICE },
+  { id: 'deployments', title: 'Deployments', service: 'Deployments' },
   { id: 'roles', title: 'Roles', adminOnly: true },
   { id: 'permissions', title: 'Permissions', adminOnly: true },
 ] as const;
@@ -57,6 +60,9 @@ const ProjectDetails: React.FC = () => {
   const visibleTabs = PROJECT_TABS.filter((item) => {
     if ('adminOnly' in item && item.adminOnly) {
       return projectAccess.canManageRbac;
+    }
+    if ('service' in item && item.service) {
+      return hasProjectService(projectAccess, item.service);
     }
     return projectAccess.canView;
   });
@@ -101,6 +107,12 @@ const ProjectDetails: React.FC = () => {
       ) : null}
       {activeTab === 'workbench' ? (
         <PlaceholderTab title="Workbench" description="Workbenches in this project will appear here." />
+      ) : null}
+      {activeTab === 'experiments' ? (
+        <PlaceholderTab
+          title="Experiments"
+          description="MLflow experiments in this project will appear here."
+        />
       ) : null}
       {activeTab === 'pipelines' ? (
         <PlaceholderTab title="Pipelines" description="Pipelines in this project will appear here." />
