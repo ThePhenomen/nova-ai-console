@@ -157,13 +157,28 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
         <ToolbarContent>
           {canCreate ? (
             <ToolbarItem>
-              <Button variant="primary" size="lg" onClick={() => setIsCreateOpen(true)}>
+              <Button
+                variant="primary"
+                onClick={() => setIsCreateOpen(true)}
+                style={{
+                  backgroundColor: 'var(--pf-t--global--color--brand--default, #0066cc)',
+                  color: 'var(--pf-t--global--text--color--on-brand, #fff)',
+                }}
+              >
                 Create Deployment
               </Button>
             </ToolbarItem>
           ) : null}
           <ToolbarItem>
-            <Button variant="secondary" onClick={() => void load()} isDisabled={isLoading}>
+            <Button
+              variant="secondary"
+              onClick={() => void load()}
+              isDisabled={isLoading}
+              style={{
+                borderColor: 'var(--pf-t--global--color--brand--default, #0066cc)',
+                color: 'var(--pf-t--global--color--brand--default, #0066cc)',
+              }}
+            >
               Refresh
             </Button>
           </ToolbarItem>
@@ -177,13 +192,20 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
       {!isLoading && items.length === 0 && !error ? (
         <EmptyState headingLevel="h2" titleText="No deployments" icon={CubesIcon}>
           <EmptyStateBody>
-            Create an InferenceService or InferenceGraph from a short form, or paste a raw YAML/JSON
+            Create an InferenceService or InferenceGraph from a short form, or paste a YAML
             manifest.
           </EmptyStateBody>
           {canCreate ? (
             <EmptyStateFooter>
               <EmptyStateActions>
-                <Button variant="primary" size="lg" onClick={() => setIsCreateOpen(true)}>
+                <Button
+                  variant="primary"
+                  onClick={() => setIsCreateOpen(true)}
+                  style={{
+                    backgroundColor: 'var(--pf-t--global--color--brand--default, #0066cc)',
+                    color: 'var(--pf-t--global--text--color--on-brand, #fff)',
+                  }}
+                >
                   Create Deployment
                 </Button>
               </EmptyStateActions>

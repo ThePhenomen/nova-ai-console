@@ -22,7 +22,7 @@ export type KServeResource = {
   };
 };
 
-export type FieldType = 'string' | 'number' | 'stringList' | 'select';
+export type FieldType = 'string' | 'number' | 'select';
 
 export type FieldDef = {
   path: string;
@@ -61,6 +61,8 @@ export const MODEL_FORMATS = [
   'triton',
 ] as const;
 
+export const PROTOCOL_VERSIONS = ['v1', 'v2', 'grpc-v1', 'grpc-v2'] as const;
+
 export const GRAPH_ROUTER_TYPES = ['Sequence', 'Splitter', 'Ensemble', 'Switch'] as const;
 
 export const KIND_CATALOG: KindCatalog[] = [
@@ -76,25 +78,15 @@ export const KIND_CATALOG: KindCatalog[] = [
     fields: [
       { path: 'metadata.name', label: 'Name', type: 'string', group: 'basic', required: true },
       {
-        path: 'spec.predictor.model.modelFormat.name',
-        label: 'Model format',
+        path: 'spec.predictor.model.protocolVersion',
+        label: 'Protocol version',
         type: 'select',
-        group: 'basic',
-        required: true,
-        options: [...MODEL_FORMATS],
-      },
-      {
-        path: 'spec.predictor.model.storageUri',
-        label: 'Storage URI',
-        type: 'string',
-        group: 'basic',
-        required: true,
-        placeholder: 's3://bucket/model or pvc://my-pvc/path',
-        helperText: 'URI of the model artifact. Supports s3://, gs://, pvc://, and http(s)://.',
+        group: 'advanced',
+        options: [...PROTOCOL_VERSIONS],
       },
       {
         path: 'spec.predictor.model.runtime',
-        label: 'Serving runtime',
+        label: 'Runtime',
         type: 'string',
         group: 'advanced',
         placeholder: 'Optional ServingRuntime name',
@@ -103,18 +95,17 @@ export const KIND_CATALOG: KindCatalog[] = [
       { path: 'spec.predictor.minReplicas', label: 'Min replicas', type: 'number', group: 'advanced' },
       { path: 'spec.predictor.maxReplicas', label: 'Max replicas', type: 'number', group: 'advanced' },
       {
-        path: 'spec.predictor.model.resources.requests.cpu',
-        label: 'CPU request',
+        path: 'spec.predictor.serviceAccountName',
+        label: 'Service account',
         type: 'string',
         group: 'advanced',
-        placeholder: '100m',
       },
       {
-        path: 'spec.predictor.model.resources.requests.memory',
-        label: 'Memory request',
+        path: 'spec.predictor.model.image',
+        label: 'Image',
         type: 'string',
         group: 'advanced',
-        placeholder: '256Mi',
+        placeholder: 'Optional container image override',
       },
     ],
   },
@@ -144,7 +135,7 @@ export const KIND_CATALOG: KindCatalog[] = [
         group: 'basic',
         required: true,
         placeholder: 'InferenceService name',
-        helperText: 'First node in the graph. Add more nodes in the raw manifest.',
+        helperText: 'First node in the graph. Add more nodes in the YAML editor.',
       },
       { path: 'spec.minReplicas', label: 'Min replicas', type: 'number', group: 'advanced' },
       { path: 'spec.maxReplicas', label: 'Max replicas', type: 'number', group: 'advanced' },

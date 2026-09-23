@@ -148,12 +148,8 @@ export const parseManifest = (text: string): Record<string, unknown> => {
   if (!trimmed) {
     throw new Error('Manifest is empty.');
   }
-  if (trimmed.startsWith('{')) {
-    const parsed: unknown = JSON.parse(trimmed);
-    if (!isRecord(parsed)) {
-      throw new Error('JSON manifest must be an object.');
-    }
-    return parsed;
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    throw new Error('Use YAML. JSON manifests are not supported.');
   }
 
   const root: Record<string, unknown> = {};
