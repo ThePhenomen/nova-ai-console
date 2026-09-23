@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Alert,
   Button,
+  ExpandableSection,
   Form,
   FormGroup,
   FormHelperText,
@@ -14,9 +15,6 @@ import {
   ModalFooter,
   ModalHeader,
   Radio,
-  Tab,
-  Tabs,
-  TabTitleText,
   TextArea,
   TextInput,
 } from '@patternfly/react-core';
@@ -37,9 +35,6 @@ type ResourceFormModalProps = {
   onSaved: (name: string) => void;
 };
 
-type EditorMode = 'fields' | 'manifest';
-type FieldTab = 'basic' | 'advanced';
-
 const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
   kind: initialKind,
   namespace,
@@ -54,8 +49,8 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
   const [draft, setDraft] = React.useState<KServeResource>(() =>
     resource ? cloneResource(resource) : emptyResource(initialKind, namespace),
   );
-  const [mode, setMode] = React.useState<EditorMode>('fields');
-  const [fieldTab, setFieldTab] = React.useState<FieldTab>('basic');
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
+  const [manifestOpen, setManifestOpen] = React.useState(false);
   const [manifestText, setManifestText] = React.useState(() =>
     toManifest(
       (resource ? cloneResource(resource) : emptyResource(initialKind, namespace)) as Record<
@@ -65,61 +60,64 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
     ),
   );
   const [error, setError] = React.useState<string | null>(null);
+  const [manifestError, setManifestError] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
 
   const projectChoices = namespaces && namespaces.length > 0 ? namespaces : [namespace];
 
+  const applyDraft = (next: KServeResource, nextKind = kind) => {
+    setDraft(next);
+    setManifestText(toManifest(next as Record<string, unknown>));
+    setManifestError(null);
+    if (nextKind.kind !== kind.kind) {
+      setKind(nextKind);
+    }
+  };
+
   const syncKind = (nextKind: KindCatalog) => {
     const next = emptyResource(nextKind, draft.metadata.namespace ?? namespace);
     next.metadata.name = draft.metadata.name;
-    setKind(nextKind);
-    setDraft(next);
-    setManifestText(toManifest(next as Record<string, unknown>));
+    applyDraft(next, nextKind);
     setError(null);
-  };
-
-  const applyDraftToManifest = (next: KServeResource) => {
-    setDraft(next);
-    setManifestText(toManifest(next as Record<string, unknown>));
-  };
-
-  const switchMode = (nextMode: EditorMode) => {
-    setError(null);
-    if (nextMode === 'manifest') {
-      setManifestText(toManifest(draft as Record<string, unknown>));
-      setMode(nextMode);
-      return;
-    }
-    try {
-      const parsed = parseManifest(manifestText) as KServeResource;
-      if (!parsed.metadata) {
-        parsed.metadata = { name: '' };
-      }
-      setDraft(parsed);
-      setMode(nextMode);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not parse manifest.');
-    }
   };
 
   const onFieldChange = (field: FieldDef, value: string) => {
     const next = cloneResource(draft);
     applyField(next, field, value);
-    applyDraftToManifest(next);
+    applyDraft(next);
+  };
+
+  const onManifestChange = (value: string) => {
+    setManifestText(value);
+    try {
+      const parsed = parseManifest(value) as KServeResource;
+      if (!parsed.metadata) {
+        parsed.metadata = { name: '' };
+      }
+      const nextKind = KIND_CATALOG.find((item) => item.kind === parsed.kind) ?? kind;
+      if (!parsed.apiVersion) {
+        parsed.apiVersion = nextKind.apiVersion;
+      }
+      if (!parsed.kind) {
+        parsed.kind = nextKind.kind;
+      }
+      setDraft(parsed);
+      setKind(nextKind);
+      setManifestError(null);
+    } catch (err) {
+      setManifestError(err instanceof Error ? err.message : 'Could not parse manifest.');
+    }
   };
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
-    let next = draft;
-    if (mode === 'manifest') {
-      try {
-        next = parseManifest(manifestText) as KServeResource;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not parse manifest.');
-        return;
-      }
+    if (manifestError) {
+      setError(manifestError);
+      setManifestOpen(true);
+      return;
     }
+    const next = cloneResource(draft);
     if (!next.apiVersion) {
       next.apiVersion = kind.apiVersion;
     }
@@ -135,24 +133,17 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
       return;
     }
     next.metadata.name = name;
-    if (kind.scope === 'Namespaced') {
-      const ns = (next.metadata.namespace ?? draft.metadata.namespace ?? namespace).trim();
-      if (!ns) {
-        setError('Project is required.');
-        return;
-      }
-      next.metadata.namespace = ns;
+    const ns = (next.metadata.namespace ?? draft.metadata.namespace ?? namespace).trim();
+    if (!ns) {
+      setError('Project is required.');
+      return;
     }
+    next.metadata.namespace = ns;
     if (resource?.metadata.resourceVersion) {
       next.metadata.resourceVersion = resource.metadata.resourceVersion;
     }
-    const missing = kind.fields.find((field) => {
-      if (!field.required) {
-        return false;
-      }
-      return fieldToString(next, field).trim() === '';
-    });
-    if (mode === 'fields' && missing) {
+    const missing = kind.fields.find((field) => field.required && fieldToString(next, field).trim() === '');
+    if (missing) {
       setError(`${missing.label} is required.`);
       return;
     }
@@ -171,7 +162,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
     }
   };
 
-  const renderFields = (group: FieldTab) =>
+  const renderFields = (group: 'basic' | 'advanced') =>
     kind.fields
       .filter((field) => field.group === group)
       .map((field) => {
@@ -191,6 +182,13 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                   <FormSelectOption key={option} value={option} label={option} />
                 ))}
               </FormSelect>
+              {field.helperText ? (
+                <FormHelperText>
+                  <HelperText>
+                    <HelperTextItem>{field.helperText}</HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
+              ) : null}
             </FormGroup>
           );
         }
@@ -220,36 +218,32 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
       isOpen
       variant="large"
       onClose={onClose}
-      aria-label={isEdit ? `Edit ${kind.title}` : `Create ${kind.title}`}
+      aria-label={isEdit ? `Edit ${kind.title}` : 'Create Deployment'}
     >
-      <ModalHeader title={isEdit ? `Edit ${kind.title}` : `Create ${kind.title}`} />
+      <ModalHeader title={isEdit ? `Edit ${kind.title}` : 'Create Deployment'} />
       <ModalBody>
         <Form id="kserve-resource-form" onSubmit={save}>
           {error ? (
-            <Alert variant="danger" isInline title="Could not save resource">
+            <Alert variant="danger" isInline title="Could not save deployment">
               {error}
             </Alert>
           ) : null}
           {allowKindSwitch && !isEdit ? (
-            <FormGroup label="Kind" isRequired fieldId="kserve-kind">
-              <FormSelect
-                id="kserve-kind"
-                value={kind.kind}
-                onChange={(_event, value) => {
-                  const next = KIND_CATALOG.find((item) => item.kind === value);
-                  if (next) {
-                    syncKind(next);
-                  }
-                }}
-                aria-label="Kind"
-              >
-                {KIND_CATALOG.map((item) => (
-                  <FormSelectOption key={item.kind} value={item.kind} label={item.title} />
-                ))}
-              </FormSelect>
+            <FormGroup role="radiogroup" label="Type" isRequired fieldId="kserve-kind">
+              {KIND_CATALOG.map((item) => (
+                <Radio
+                  key={item.kind}
+                  id={`kserve-kind-${item.kind}`}
+                  name="kserve-kind"
+                  label={item.title}
+                  description={item.description}
+                  isChecked={kind.kind === item.kind}
+                  onChange={() => syncKind(item)}
+                />
+              ))}
             </FormGroup>
           ) : null}
-          {kind.scope === 'Namespaced' && projectChoices.length > 1 ? (
+          {projectChoices.length > 1 ? (
             <FormGroup label="Project" isRequired fieldId="kserve-namespace">
               <FormSelect
                 id="kserve-namespace"
@@ -257,7 +251,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                 onChange={(_event, value) => {
                   const next = cloneResource(draft);
                   next.metadata.namespace = value;
-                  applyDraftToManifest(next);
+                  applyDraft(next);
                 }}
                 isDisabled={isEdit}
                 aria-label="Project"
@@ -268,59 +262,48 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
               </FormSelect>
             </FormGroup>
           ) : null}
-          <FormGroup role="radiogroup" isInline fieldId="kserve-editor-mode" label="Editor">
-            <Radio
-              id="kserve-mode-fields"
-              name="kserve-editor-mode"
-              label="Fields"
-              isChecked={mode === 'fields'}
-              onChange={() => switchMode('fields')}
-            />
-            <Radio
-              id="kserve-mode-manifest"
-              name="kserve-editor-mode"
-              label="Raw manifest"
-              isChecked={mode === 'manifest'}
-              onChange={() => switchMode('manifest')}
-            />
-          </FormGroup>
-          {mode === 'fields' ? (
-            <>
-              <Tabs
-                activeKey={fieldTab}
-                onSelect={(_event, tabKey) => setFieldTab(String(tabKey) as FieldTab)}
-              >
-                <Tab eventKey="basic" title={<TabTitleText>Basic</TabTitleText>} />
-                <Tab eventKey="advanced" title={<TabTitleText>Advanced</TabTitleText>} />
-              </Tabs>
-              <div style={{ marginTop: '1rem' }}>
-                {fieldTab === 'basic' ? renderFields('basic') : renderFields('advanced')}
-                {fieldTab === 'advanced' ? (
+          {renderFields('basic')}
+          <div style={{ marginTop: '1rem' }}>
+            <ExpandableSection
+              toggleText="Advanced"
+              isExpanded={advancedOpen}
+              onToggle={(_event, expanded) => setAdvancedOpen(expanded)}
+            >
+              {renderFields('advanced')}
+              <HelperText>
+                <HelperTextItem>
+                  Extra spec fields such as GPU limits, affinity, and additional graph nodes can be
+                  set in the raw manifest.
+                </HelperTextItem>
+              </HelperText>
+            </ExpandableSection>
+          </div>
+          <div style={{ marginTop: '0.5rem' }}>
+            <ExpandableSection
+              toggleText="Raw manifest"
+              isExpanded={manifestOpen}
+              onToggle={(_event, expanded) => setManifestOpen(expanded)}
+            >
+              <FormGroup label="Manifest" fieldId="kserve-manifest">
+                <TextArea
+                  id="kserve-manifest"
+                  value={manifestText}
+                  onChange={(_event, value) => onManifestChange(value)}
+                  rows={18}
+                  resizeOrientation="vertical"
+                  validated={manifestError ? 'error' : 'default'}
+                />
+                <FormHelperText>
                   <HelperText>
                     <HelperTextItem>
-                      Remaining spec fields (affinity, nodeSelector, extra graph nodes, GPU limits)
-                      can be set in the raw manifest.
+                      {manifestError ??
+                        `YAML or JSON of the full ${kind.title}. Edits sync back to the fields above.`}
                     </HelperTextItem>
                   </HelperText>
-                ) : null}
-              </div>
-            </>
-          ) : (
-            <FormGroup label="Manifest" isRequired fieldId="kserve-manifest">
-              <TextArea
-                id="kserve-manifest"
-                value={manifestText}
-                onChange={(_event, value) => setManifestText(value)}
-                rows={22}
-                resizeOrientation="vertical"
-              />
-              <FormHelperText>
-                <HelperText>
-                  <HelperTextItem>YAML or JSON of the full {kind.title}.</HelperTextItem>
-                </HelperText>
-              </FormHelperText>
-            </FormGroup>
-          )}
+                </FormHelperText>
+              </FormGroup>
+            </ExpandableSection>
+          </div>
         </Form>
       </ModalBody>
       <ModalFooter>

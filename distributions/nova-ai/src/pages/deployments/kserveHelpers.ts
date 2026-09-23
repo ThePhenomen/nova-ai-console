@@ -28,24 +28,7 @@ const PREDICTOR_META_KEYS = new Set([
 ]);
 
 export const emptyResource = (kind: KindCatalog, namespace: string): KServeResource => {
-  const metadata =
-    kind.scope === 'Namespaced' ? { name: '', namespace } : { name: '' };
-  if (kind.kind === 'InferenceService') {
-    return {
-      apiVersion: kind.apiVersion,
-      kind: kind.kind,
-      metadata,
-      spec: {
-        predictor: {
-          minReplicas: 1,
-          model: {
-            modelFormat: { name: 'sklearn' },
-            resources: { requests: { cpu: '100m', memory: '256Mi' } },
-          },
-        },
-      },
-    };
-  }
+  const metadata = { name: '', namespace };
   if (kind.kind === 'InferenceGraph') {
     return {
       apiVersion: kind.apiVersion,
@@ -66,9 +49,12 @@ export const emptyResource = (kind: KindCatalog, namespace: string): KServeResou
     kind: kind.kind,
     metadata,
     spec: {
-      modelSize: '1Gi',
-      nodeGroups: [],
-      sourceModelUri: '',
+      predictor: {
+        minReplicas: 1,
+        model: {
+          modelFormat: { name: 'sklearn' },
+        },
+      },
     },
   };
 };
@@ -150,14 +136,10 @@ export const serviceUrl = (resource: KServeResource): string => {
 };
 
 export const resourceSummary = (kind: KindCatalog, resource: KServeResource): string => {
-  if (kind.kind === 'InferenceService') {
-    return predictorType(resource);
-  }
   if (kind.kind === 'InferenceGraph') {
     const nodes = asRecord(asRecord(resource.spec)?.nodes);
     const count = nodes ? Object.keys(nodes).length : 0;
     return count === 1 ? '1 node' : `${count} nodes`;
   }
-  const uri = asRecord(resource.spec)?.sourceModelUri;
-  return typeof uri === 'string' && uri.trim() !== '' ? uri : '—';
+  return predictorType(resource);
 };

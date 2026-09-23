@@ -18,9 +18,6 @@ import {
   ModalHeader,
   PageSection,
   Spinner,
-  Tab,
-  Tabs,
-  TabTitleText,
   Toolbar,
   ToolbarContent,
   ToolbarItem,
@@ -39,6 +36,8 @@ import ResourceFormModal from './ResourceFormModal';
 type DeploymentsPageProps = {
   projectName?: string;
 };
+
+const catalogOf = (item: KServeResource): KindCatalog => kindByName(item.kind ?? 'InferenceService');
 
 const readyColor = (status: ReturnType<typeof readyStatus>): 'green' | 'red' | 'grey' => {
   if (status === 'True') {
@@ -60,7 +59,6 @@ const formatCreated = (value?: string): string => {
 
 const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
   const { access } = usePlatformAccess();
-  const [kind, setKind] = React.useState<KindCatalog>(() => kindByName('InferenceService'));
   const [items, setItems] = React.useState<KServeResource[]>([]);
   const [namespaces, setNamespaces] = React.useState<string[]>(projectName ? [projectName] : []);
   const [error, setError] = React.useState<string | null>(null);
@@ -85,51 +83,42 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
                 access.canViewProject(name) && hasProjectService(access.forProject(name), 'Deployments'),
             );
       setNamespaces(scoped);
-      if (kind.scope === 'Cluster') {
-        setItems(
-          (await listKServeResources(kind)).toSorted((left, right) =>
-            left.metadata.name.localeCompare(right.metadata.name),
-          ),
-        );
-        return;
-      }
-      const lists =
-        projectName && scoped[0]
-          ? [await listKServeResources(kind, scoped[0])]
-          : await Promise.all(
-              scoped.map(async (namespace) => {
-                try {
-                  return await listKServeResources(kind, namespace);
-                } catch {
-                  return [];
-                }
-              }),
-            );
+      const lists = await Promise.all(
+        KIND_CATALOG.flatMap((kind) =>
+          scoped.map(async (namespace) => {
+            try {
+              const listed = await listKServeResources(kind, namespace);
+              return listed.map((item) => ({
+                ...item,
+                kind: item.kind ?? kind.kind,
+                apiVersion: item.apiVersion ?? kind.apiVersion,
+              }));
+            } catch {
+              return [];
+            }
+          }),
+        ),
+      );
       setItems(
         lists.flat().toSorted((left, right) => left.metadata.name.localeCompare(right.metadata.name)),
       );
     } catch (err) {
-      setError(err instanceof K8sApiError ? err.message : `Failed to load ${kind.title} resources.`);
+      setError(err instanceof K8sApiError ? err.message : 'Failed to load deployments.');
       setItems([]);
     } finally {
       setIsLoading(false);
     }
-  }, [access, kind, projectName]);
+  }, [access, projectName]);
 
   React.useEffect(() => {
     void load();
   }, [load]);
 
   const createNamespaces = namespaces.filter((namespace) => access.forProject(namespace).canEdit);
-  const canCreate =
-    kind.scope === 'Cluster' ? access.canCreateProjects : createNamespaces.length > 0;
+  const canCreate = createNamespaces.length > 0;
   const defaultCreateNamespace = projectName ?? createNamespaces[0] ?? '';
-  const canMutateResource = (item: KServeResource): boolean => {
-    if (kind.scope === 'Cluster') {
-      return access.canCreateProjects;
-    }
-    return access.forProject(item.metadata.namespace ?? '').canEdit;
-  };
+  const canMutateResource = (item: KServeResource): boolean =>
+    access.forProject(item.metadata.namespace ?? '').canEdit;
 
   const confirmDelete = async () => {
     if (!deleteTarget) {
@@ -138,7 +127,11 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
     setIsDeleting(true);
     setActionError(null);
     try {
-      await deleteKServeResource(kind, deleteTarget.metadata.name, deleteTarget.metadata.namespace);
+      await deleteKServeResource(
+        catalogOf(deleteTarget),
+        deleteTarget.metadata.name,
+        deleteTarget.metadata.namespace,
+      );
       setDeleteTarget(null);
       await load();
     } catch (err) {
@@ -148,29 +141,10 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
     }
   };
 
-  const summaryTitle =
-    kind.kind === 'InferenceService' ? 'Predictor' : kind.kind === 'InferenceGraph' ? 'Graph' : 'Source';
-
   return (
     <PageSection>
-      <Tabs
-        activeKey={kind.kind}
-        onSelect={(_event, tabKey) => {
-          const next = KIND_CATALOG.find((item) => item.kind === String(tabKey));
-          if (next) {
-            setKind(next);
-            setViewTarget(null);
-            setEditTarget(null);
-          }
-        }}
-        style={{ marginBottom: '1rem' }}
-      >
-        {KIND_CATALOG.map((item) => (
-          <Tab key={item.kind} eventKey={item.kind} title={<TabTitleText>{item.title}</TabTitleText>} />
-        ))}
-      </Tabs>
       {error ? (
-        <Alert variant="danger" isInline title={`Could not load ${kind.title}`} style={{ marginBottom: '1rem' }}>
+        <Alert variant="danger" isInline title="Could not load deployments" style={{ marginBottom: '1rem' }}>
           {error}
         </Alert>
       ) : null}
@@ -183,8 +157,8 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
         <ToolbarContent>
           {canCreate ? (
             <ToolbarItem>
-              <Button variant="primary" onClick={() => setIsCreateOpen(true)}>
-                Create {kind.title}
+              <Button variant="primary" size="lg" onClick={() => setIsCreateOpen(true)}>
+                Create Deployment
               </Button>
             </ToolbarItem>
           ) : null}
@@ -201,15 +175,16 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
         </Bullseye>
       ) : null}
       {!isLoading && items.length === 0 && !error ? (
-        <EmptyState headingLevel="h2" titleText={`No ${kind.title} resources`} icon={CubesIcon}>
+        <EmptyState headingLevel="h2" titleText="No deployments" icon={CubesIcon}>
           <EmptyStateBody>
-            Create a {kind.title} from fields or paste a raw YAML/JSON manifest.
+            Create an InferenceService or InferenceGraph from a short form, or paste a raw YAML/JSON
+            manifest.
           </EmptyStateBody>
           {canCreate ? (
             <EmptyStateFooter>
               <EmptyStateActions>
-                <Button variant="primary" onClick={() => setIsCreateOpen(true)}>
-                  Create {kind.title}
+                <Button variant="primary" size="lg" onClick={() => setIsCreateOpen(true)}>
+                  Create Deployment
                 </Button>
               </EmptyStateActions>
             </EmptyStateFooter>
@@ -217,20 +192,22 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
         </EmptyState>
       ) : null}
       {!isLoading && items.length > 0 ? (
-        <Table aria-label={kind.title} variant="compact">
+        <Table aria-label="Deployments" variant="compact">
           <Thead>
             <Tr>
               <Th>Name</Th>
-              {kind.scope === 'Namespaced' && !projectName ? <Th>Project</Th> : null}
-              <Th>{summaryTitle}</Th>
+              <Th>Kind</Th>
+              {!projectName ? <Th>Project</Th> : null}
+              <Th>Summary</Th>
               <Th>Ready</Th>
-              {kind.kind === 'LocalModelCache' ? <Th>Copies</Th> : <Th>URL</Th>}
+              <Th>URL</Th>
               <Th>Created</Th>
               <Th screenReaderText="Actions" />
             </Tr>
           </Thead>
           <Tbody>
             {items.map((item) => {
+              const kind = catalogOf(item);
               const namespace = item.metadata.namespace ?? '';
               const ready = readyStatus(item);
               const url = serviceUrl(item);
@@ -241,19 +218,16 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
                   onRowClick={() => setViewTarget(item)}
                 >
                   <Td dataLabel="Name">{item.metadata.name}</Td>
-                  {kind.scope === 'Namespaced' && !projectName ? (
-                    <Td dataLabel="Project">{namespace || '—'}</Td>
-                  ) : null}
-                  <Td dataLabel={summaryTitle}>{resourceSummary(kind, item)}</Td>
+                  <Td dataLabel="Kind">{kind.title}</Td>
+                  {!projectName ? <Td dataLabel="Project">{namespace || '—'}</Td> : null}
+                  <Td dataLabel="Summary">{resourceSummary(kind, item)}</Td>
                   <Td dataLabel="Ready">
                     <Label color={readyColor(ready)} isCompact>
                       {ready === 'True' ? 'Ready' : ready === 'False' ? 'Not ready' : 'Unknown'}
                     </Label>
                   </Td>
-                  <Td dataLabel={kind.kind === 'LocalModelCache' ? 'Copies' : 'URL'}>
-                    {kind.kind === 'LocalModelCache' ? (
-                      `${item.status?.copies?.available ?? 0}/${item.status?.copies?.total ?? 0}`
-                    ) : url ? (
+                  <Td dataLabel="URL">
+                    {url ? (
                       <a href={url} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()}>
                         {url}
                       </a>
@@ -302,11 +276,12 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
           </Tbody>
         </Table>
       ) : null}
-      {isCreateOpen && (kind.scope === 'Cluster' || defaultCreateNamespace) ? (
+      {isCreateOpen && defaultCreateNamespace ? (
         <ResourceFormModal
-          kind={kind}
+          kind={kindByName('InferenceService')}
           namespace={defaultCreateNamespace}
           namespaces={createNamespaces}
+          allowKindSwitch
           onClose={() => setIsCreateOpen(false)}
           onSaved={() => {
             setIsCreateOpen(false);
@@ -316,7 +291,7 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
       ) : null}
       {editTarget ? (
         <ResourceFormModal
-          kind={kind}
+          kind={catalogOf(editTarget)}
           namespace={editTarget.metadata.namespace ?? defaultCreateNamespace}
           resource={editTarget}
           onClose={() => setEditTarget(null)}
@@ -327,13 +302,13 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
         />
       ) : null}
       {viewTarget ? (
-        <Modal isOpen variant="medium" onClose={() => setViewTarget(null)} aria-label={`${kind.title} details`}>
+        <Modal isOpen variant="medium" onClose={() => setViewTarget(null)} aria-label="Deployment details">
           <ModalHeader title={viewTarget.metadata.name} />
           <ModalBody>
             <DescriptionList isHorizontal>
               <DescriptionListGroup>
                 <DescriptionListTerm>Kind</DescriptionListTerm>
-                <DescriptionListDescription>{kind.title}</DescriptionListDescription>
+                <DescriptionListDescription>{catalogOf(viewTarget).title}</DescriptionListDescription>
               </DescriptionListGroup>
               {viewTarget.metadata.namespace ? (
                 <DescriptionListGroup>
@@ -342,28 +317,23 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
                 </DescriptionListGroup>
               ) : null}
               <DescriptionListGroup>
-                <DescriptionListTerm>{summaryTitle}</DescriptionListTerm>
+                <DescriptionListTerm>
+                  {catalogOf(viewTarget).kind === 'InferenceService' ? 'Storage URI' : 'Graph'}
+                </DescriptionListTerm>
                 <DescriptionListDescription>
-                  {kind.kind === 'InferenceService' ? storageUriOf(viewTarget) : resourceSummary(kind, viewTarget)}
+                  {catalogOf(viewTarget).kind === 'InferenceService'
+                    ? storageUriOf(viewTarget)
+                    : resourceSummary(catalogOf(viewTarget), viewTarget)}
                 </DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
                 <DescriptionListTerm>Ready</DescriptionListTerm>
                 <DescriptionListDescription>{readyStatus(viewTarget)}</DescriptionListDescription>
               </DescriptionListGroup>
-              {kind.kind === 'LocalModelCache' ? (
-                <DescriptionListGroup>
-                  <DescriptionListTerm>Copies</DescriptionListTerm>
-                  <DescriptionListDescription>
-                    {`${viewTarget.status?.copies?.available ?? 0} available / ${viewTarget.status?.copies?.total ?? 0} total`}
-                  </DescriptionListDescription>
-                </DescriptionListGroup>
-              ) : (
-                <DescriptionListGroup>
-                  <DescriptionListTerm>URL</DescriptionListTerm>
-                  <DescriptionListDescription>{serviceUrl(viewTarget) || '—'}</DescriptionListDescription>
-                </DescriptionListGroup>
-              )}
+              <DescriptionListGroup>
+                <DescriptionListTerm>URL</DescriptionListTerm>
+                <DescriptionListDescription>{serviceUrl(viewTarget) || '—'}</DescriptionListDescription>
+              </DescriptionListGroup>
               <DescriptionListGroup>
                 <DescriptionListTerm>Created</DescriptionListTerm>
                 <DescriptionListDescription>
@@ -413,10 +383,10 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
         </Modal>
       ) : null}
       {deleteTarget ? (
-        <Modal isOpen variant="small" onClose={() => setDeleteTarget(null)} aria-label={`Delete ${kind.title}`}>
-          <ModalHeader title={`Delete ${kind.title}`} />
+        <Modal isOpen variant="small" onClose={() => setDeleteTarget(null)} aria-label="Delete deployment">
+          <ModalHeader title={`Delete ${catalogOf(deleteTarget).title}`} />
           <ModalBody>
-            Delete {kind.title} {deleteTarget.metadata.name}
+            Delete {catalogOf(deleteTarget).title} {deleteTarget.metadata.name}
             {deleteTarget.metadata.namespace ? ` in ${deleteTarget.metadata.namespace}` : ''}? This
             cannot be undone.
           </ModalBody>

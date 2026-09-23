@@ -3,13 +3,8 @@ import type { K8sList } from '../../cluster/types';
 import type { KindCatalog, KServeResource } from './crdCatalog';
 import { cloneResource } from './manifest';
 
-const collectionPath = (kind: KindCatalog, namespace?: string): string => {
-  const root = `/apis/${kind.group}/${kind.version}`;
-  if (kind.scope === 'Cluster') {
-    return `${root}/${kind.plural}`;
-  }
-  return `${root}/namespaces/${encodeURIComponent(namespace ?? '')}/${kind.plural}`;
-};
+const collectionPath = (kind: KindCatalog, namespace?: string): string =>
+  `/apis/${kind.group}/${kind.version}/namespaces/${encodeURIComponent(namespace ?? '')}/${kind.plural}`;
 
 const itemPath = (kind: KindCatalog, namespace: string | undefined, name: string): string =>
   `${collectionPath(kind, namespace)}/${encodeURIComponent(name)}`;

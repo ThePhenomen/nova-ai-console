@@ -36,13 +36,14 @@ export type FieldDef = {
 };
 
 export type KindCatalog = {
-  kind: 'InferenceService' | 'InferenceGraph' | 'LocalModelCache';
+  kind: 'InferenceService' | 'InferenceGraph';
   title: string;
+  description: string;
   apiVersion: string;
   group: string;
   version: string;
   plural: string;
-  scope: 'Namespaced' | 'Cluster';
+  scope: 'Namespaced';
   fields: FieldDef[];
 };
 
@@ -66,6 +67,7 @@ export const KIND_CATALOG: KindCatalog[] = [
   {
     kind: 'InferenceService',
     title: 'InferenceService',
+    description: 'Deploy a single model.',
     apiVersion: 'serving.kserve.io/v1beta1',
     group: 'serving.kserve.io',
     version: 'v1beta1',
@@ -94,107 +96,32 @@ export const KIND_CATALOG: KindCatalog[] = [
         path: 'spec.predictor.model.runtime',
         label: 'Serving runtime',
         type: 'string',
-        group: 'basic',
+        group: 'advanced',
         placeholder: 'Optional ServingRuntime name',
+        helperText: 'Leave empty to let KServe pick a runtime from the model format.',
       },
-      { path: 'spec.predictor.minReplicas', label: 'Min replicas', type: 'number', group: 'basic' },
+      { path: 'spec.predictor.minReplicas', label: 'Min replicas', type: 'number', group: 'advanced' },
+      { path: 'spec.predictor.maxReplicas', label: 'Max replicas', type: 'number', group: 'advanced' },
       {
         path: 'spec.predictor.model.resources.requests.cpu',
         label: 'CPU request',
         type: 'string',
-        group: 'basic',
+        group: 'advanced',
         placeholder: '100m',
       },
       {
         path: 'spec.predictor.model.resources.requests.memory',
         label: 'Memory request',
         type: 'string',
-        group: 'basic',
+        group: 'advanced',
         placeholder: '256Mi',
-      },
-      { path: 'spec.predictor.maxReplicas', label: 'Max replicas', type: 'number', group: 'advanced' },
-      { path: 'spec.predictor.timeout', label: 'Timeout (seconds)', type: 'number', group: 'advanced' },
-      {
-        path: 'spec.predictor.scaleMetric',
-        label: 'Scale metric',
-        type: 'select',
-        group: 'advanced',
-        options: ['cpu', 'memory', 'concurrency', 'rps'],
-      },
-      {
-        path: 'spec.predictor.containerConcurrency',
-        label: 'Container concurrency',
-        type: 'number',
-        group: 'advanced',
-      },
-      {
-        path: 'spec.predictor.canaryTrafficPercent',
-        label: 'Canary traffic %',
-        type: 'number',
-        group: 'advanced',
-      },
-      {
-        path: 'spec.predictor.model.runtimeVersion',
-        label: 'Runtime version',
-        type: 'string',
-        group: 'advanced',
-      },
-      {
-        path: 'spec.predictor.model.image',
-        label: 'Predictor image',
-        type: 'string',
-        group: 'advanced',
-        placeholder: 'Optional container image override',
-      },
-      {
-        path: 'spec.predictor.model.protocolVersion',
-        label: 'Protocol version',
-        type: 'string',
-        group: 'advanced',
-        placeholder: 'v2',
-      },
-      {
-        path: 'spec.predictor.model.args',
-        label: 'Predictor args',
-        type: 'stringList',
-        group: 'advanced',
-        placeholder: '--workers=1, --http_port=8080',
-      },
-      {
-        path: 'spec.predictor.model.resources.limits.cpu',
-        label: 'CPU limit',
-        type: 'string',
-        group: 'advanced',
-      },
-      {
-        path: 'spec.predictor.model.resources.limits.memory',
-        label: 'Memory limit',
-        type: 'string',
-        group: 'advanced',
-      },
-      {
-        path: 'spec.predictor.serviceAccountName',
-        label: 'Service account',
-        type: 'string',
-        group: 'advanced',
-      },
-      {
-        path: 'spec.transformer.model.storageUri',
-        label: 'Transformer storage URI',
-        type: 'string',
-        group: 'advanced',
-      },
-      {
-        path: 'spec.explainer.model.storageUri',
-        label: 'Explainer storage URI',
-        type: 'string',
-        group: 'advanced',
       },
     ],
   },
   {
     kind: 'InferenceGraph',
     title: 'InferenceGraph',
+    description: 'Route traffic across InferenceServices.',
     apiVersion: 'serving.kserve.io/v1alpha1',
     group: 'serving.kserve.io',
     version: 'v1alpha1',
@@ -204,7 +131,7 @@ export const KIND_CATALOG: KindCatalog[] = [
       { path: 'metadata.name', label: 'Name', type: 'string', group: 'basic', required: true },
       {
         path: 'spec.nodes.root.routerType',
-        label: 'Root router',
+        label: 'Router',
         type: 'select',
         group: 'basic',
         required: true,
@@ -215,73 +142,12 @@ export const KIND_CATALOG: KindCatalog[] = [
         label: 'Root service',
         type: 'string',
         group: 'basic',
+        required: true,
         placeholder: 'InferenceService name',
-        helperText: 'First graph node. Add more nodes in the raw manifest.',
+        helperText: 'First node in the graph. Add more nodes in the raw manifest.',
       },
       { path: 'spec.minReplicas', label: 'Min replicas', type: 'number', group: 'advanced' },
       { path: 'spec.maxReplicas', label: 'Max replicas', type: 'number', group: 'advanced' },
-      { path: 'spec.timeout', label: 'Timeout (seconds)', type: 'number', group: 'advanced' },
-      {
-        path: 'spec.scaleMetric',
-        label: 'Scale metric',
-        type: 'select',
-        group: 'advanced',
-        options: ['cpu', 'memory', 'concurrency', 'rps'],
-      },
-      { path: 'spec.scaleTarget', label: 'Scale target', type: 'number', group: 'advanced' },
-      {
-        path: 'spec.resources.requests.cpu',
-        label: 'CPU request',
-        type: 'string',
-        group: 'advanced',
-        placeholder: '100m',
-      },
-      {
-        path: 'spec.resources.requests.memory',
-        label: 'Memory request',
-        type: 'string',
-        group: 'advanced',
-        placeholder: '256Mi',
-      },
-      { path: 'spec.serviceAccountName', label: 'Service account', type: 'string', group: 'advanced' },
-      { path: 'spec.nodeName', label: 'Node name', type: 'string', group: 'advanced' },
-    ],
-  },
-  {
-    kind: 'LocalModelCache',
-    title: 'LocalModelCache',
-    apiVersion: 'serving.kserve.io/v1alpha1',
-    group: 'serving.kserve.io',
-    version: 'v1alpha1',
-    plural: 'localmodelcaches',
-    scope: 'Cluster',
-    fields: [
-      { path: 'metadata.name', label: 'Name', type: 'string', group: 'basic', required: true },
-      {
-        path: 'spec.sourceModelUri',
-        label: 'Source model URI',
-        type: 'string',
-        group: 'basic',
-        required: true,
-        placeholder: 's3://bucket/model',
-      },
-      {
-        path: 'spec.modelSize',
-        label: 'Model size',
-        type: 'string',
-        group: 'basic',
-        required: true,
-        placeholder: '1Gi',
-      },
-      {
-        path: 'spec.nodeGroups',
-        label: 'Node groups',
-        type: 'stringList',
-        group: 'basic',
-        required: true,
-        placeholder: 'gpu-group, cpu-group',
-        helperText: 'Comma-separated LocalModelNodeGroup names.',
-      },
     ],
   },
 ];
@@ -289,7 +155,7 @@ export const KIND_CATALOG: KindCatalog[] = [
 export const kindByName = (kind: string): KindCatalog => {
   const found = KIND_CATALOG.find((item) => item.kind === kind);
   if (!found) {
-    throw new Error(`Unknown KServe kind: ${kind}`);
+    throw new Error(`Unknown deployment kind: ${kind}`);
   }
   return found;
 };
