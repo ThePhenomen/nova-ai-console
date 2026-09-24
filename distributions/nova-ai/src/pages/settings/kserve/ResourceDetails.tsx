@@ -37,8 +37,8 @@ import {
   asRecord,
   canEditSettingsKind,
   containerSummary,
+  formatLabelMap,
   isPreInstalled,
-  isRuntimeDisabled,
   modelFormatSummary,
   runtimeVersionTag,
   uriFormatSummary,
@@ -108,7 +108,7 @@ const ResourceDetails: React.FC = () => {
   };
 
   const resolvedKind = item?.kind ? settingsKindByName(item.kind) : kind;
-  const disabled = item ? isRuntimeDisabled(item) : false;
+  const spec = asRecord(item?.spec);
 
   return (
     <>
@@ -170,14 +170,6 @@ const ResourceDetails: React.FC = () => {
                 <DescriptionListTerm>Created</DescriptionListTerm>
                 <DescriptionListDescription>{formatCreated(item.metadata.creationTimestamp)}</DescriptionListDescription>
               </DescriptionListGroup>
-              <DescriptionListGroup>
-                <DescriptionListTerm>Disabled</DescriptionListTerm>
-                <DescriptionListDescription>
-                  <Label color={disabled ? 'orange' : 'green'} isCompact>
-                    {disabled ? 'Disabled' : 'Enabled'}
-                  </Label>
-                </DescriptionListDescription>
-              </DescriptionListGroup>
               {resolvedKind.kind === 'ClusterStorageContainer' ? (
                 <>
                   <DescriptionListGroup>
@@ -203,14 +195,20 @@ const ResourceDetails: React.FC = () => {
               </DescriptionListGroup>
               <DescriptionListGroup>
                 <DescriptionListTerm>Labels</DescriptionListTerm>
-                <DescriptionListDescription>
-                  {item.metadata.labels && Object.keys(item.metadata.labels).length > 0
-                    ? Object.entries(item.metadata.labels)
-                        .map(([key, value]) => `${key}=${value}`)
-                        .join(', ')
-                    : '—'}
-                </DescriptionListDescription>
+                <DescriptionListDescription>{formatLabelMap(item.metadata.labels)}</DescriptionListDescription>
               </DescriptionListGroup>
+              {resolvedKind.kind !== 'ClusterStorageContainer' ? (
+                <>
+                  <DescriptionListGroup>
+                    <DescriptionListTerm>Spec labels</DescriptionListTerm>
+                    <DescriptionListDescription>{formatLabelMap(spec?.labels)}</DescriptionListDescription>
+                  </DescriptionListGroup>
+                  <DescriptionListGroup>
+                    <DescriptionListTerm>Spec annotations</DescriptionListTerm>
+                    <DescriptionListDescription>{formatLabelMap(spec?.annotations)}</DescriptionListDescription>
+                  </DescriptionListGroup>
+                </>
+              ) : null}
             </DescriptionList>
             <Content component="h2" style={{ marginTop: '1.5rem' }}>
               YAML

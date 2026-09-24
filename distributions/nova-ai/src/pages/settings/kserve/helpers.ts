@@ -63,16 +63,19 @@ export type SecurityDraft = {
   dropCapabilities: string[];
 };
 
+export type ResourceRowDraft = {
+  name: string;
+  request: string;
+  limit: string;
+};
+
 export type ContainerDraft = {
   name: string;
   image: string;
   args: string[];
   command: string[];
   env: EnvDraft[];
-  cpuRequest: string;
-  memoryRequest: string;
-  cpuLimit: string;
-  memoryLimit: string;
+  resources: ResourceRowDraft[];
   volumeMounts: VolumeMountDraft[];
   security: SecurityDraft;
   livenessProbe: ProbeDraft;
@@ -97,16 +100,18 @@ export const emptyProbe = (): ProbeDraft => ({
   execCommand: '',
 });
 
+export const emptyResourceRows = (): ResourceRowDraft[] => [
+  { name: 'cpu', request: '', limit: '' },
+  { name: 'memory', request: '', limit: '' },
+];
+
 export const emptyContainer = (name = 'kserve-container'): ContainerDraft => ({
   name,
   image: '',
   args: [],
   command: [],
   env: [],
-  cpuRequest: '',
-  memoryRequest: '',
-  cpuLimit: '',
-  memoryLimit: '',
+  resources: emptyResourceRows(),
   volumeMounts: [],
   security: defaultSecurity(),
   livenessProbe: emptyProbe(),
@@ -117,31 +122,51 @@ export const emptyContainer = (name = 'kserve-container'): ContainerDraft => ({
 const stringList = (value: unknown): string[] =>
   Array.isArray(value) ? value.map((item) => String(item)).filter((item) => item.trim() !== '') : [];
 
-const resourceString = (resources: Record<string, unknown> | undefined, bucket: string, name: string): string => {
-  const group = asRecord(resources?.[bucket]);
-  const value = group?.[name];
-  return value === undefined || value === null ? '' : String(value);
+const readResourceRows = (value: unknown): ResourceRowDraft[] => {
+  const resources = asRecord(value);
+  const requests = asRecord(resources?.requests) ?? {};
+  const limits = asRecord(resources?.limits) ?? {};
+  const names = [...new Set([...Object.keys(requests), ...Object.keys(limits)])];
+  const rows = names
+    .toSorted((left, right) => {
+      const rank = (name: string): number => (name === 'cpu' ? 0 : name === 'memory' ? 1 : 2);
+      const byKind = rank(left) - rank(right);
+      return byKind !== 0 ? byKind : left.localeCompare(right);
+    })
+    .map((name) => ({
+      name,
+      request: requests[name] === undefined || requests[name] === null ? '' : String(requests[name]),
+      limit: limits[name] === undefined || limits[name] === null ? '' : String(limits[name]),
+    }));
+  if (rows.length === 0) {
+    return emptyResourceRows();
+  }
+  const hasCpu = rows.some((row) => row.name === 'cpu');
+  const hasMemory = rows.some((row) => row.name === 'memory');
+  return [
+    ...(hasCpu ? [] : [{ name: 'cpu', request: '', limit: '' }]),
+    ...(hasMemory ? [] : [{ name: 'memory', request: '', limit: '' }]),
+    ...rows,
+  ];
 };
 
-const writeResourceBag = (
-  cpuRequest: string,
-  memoryRequest: string,
-  cpuLimit: string,
-  memoryLimit: string,
-): Record<string, unknown> | undefined => {
+const writeResourceRows = (rows: ResourceRowDraft[], strict = false): Record<string, unknown> | undefined => {
   const requests: Record<string, string> = {};
   const limits: Record<string, string> = {};
-  if (cpuRequest.trim()) {
-    requests.cpu = cpuRequest.trim();
-  }
-  if (memoryRequest.trim()) {
-    requests.memory = memoryRequest.trim();
-  }
-  if (cpuLimit.trim()) {
-    limits.cpu = cpuLimit.trim();
-  }
-  if (memoryLimit.trim()) {
-    limits.memory = memoryLimit.trim();
+  rows.forEach((row) => {
+    const name = row.name.trim();
+    if (!name) {
+      return;
+    }
+    if (row.request.trim()) {
+      requests[name] = row.request.trim();
+    }
+    if (row.limit.trim()) {
+      limits[name] = row.limit.trim();
+    }
+  });
+  if (strict && Object.keys(requests).length === 0 && Object.keys(limits).length === 0) {
+    return undefined;
   }
   const resources: Record<string, unknown> = {};
   if (Object.keys(requests).length > 0) {
@@ -340,17 +365,13 @@ export const readContainer = (value: unknown, fallbackName: string): ContainerDr
   if (!container) {
     return emptyContainer(fallbackName);
   }
-  const resources = asRecord(container.resources);
   return {
     name: String(container.name ?? fallbackName),
     image: String(container.image ?? ''),
     args: Array.isArray(container.args) ? container.args.map((item) => String(item)) : [],
     command: Array.isArray(container.command) ? container.command.map((item) => String(item)) : [],
     env: readEnv(container.env),
-    cpuRequest: resourceString(resources, 'requests', 'cpu'),
-    memoryRequest: resourceString(resources, 'requests', 'memory'),
-    cpuLimit: resourceString(resources, 'limits', 'cpu'),
-    memoryLimit: resourceString(resources, 'limits', 'memory'),
+    resources: readResourceRows(container.resources),
     volumeMounts: readVolumeMounts(container.volumeMounts),
     security: readSecurity(container.securityContext),
     livenessProbe: readProbe(container.livenessProbe),
@@ -383,12 +404,7 @@ export const writeContainer = (draft: ContainerDraft, strict = false): Record<st
   if (env) {
     container.env = env;
   }
-  const resources = writeResourceBag(
-    draft.cpuRequest,
-    draft.memoryRequest,
-    draft.cpuLimit,
-    draft.memoryLimit,
-  );
+  const resources = writeResourceRows(draft.resources, strict);
   if (resources) {
     container.resources = resources;
   }
@@ -431,8 +447,21 @@ export const writeContainers = (rows: ContainerDraft[], strict = false): unknown
   return items.length > 0 ? items : undefined;
 };
 
-export const readLabels = (labels?: Record<string, string>): LabelDraft[] =>
-  Object.entries(labels ?? {}).map(([key, value]) => ({ key, value }));
+export const readLabels = (labels?: unknown): LabelDraft[] => {
+  const record = asRecord(labels);
+  if (!record) {
+    return [];
+  }
+  return Object.entries(record).map(([key, value]) => ({
+    key,
+    value: value == null ? '' : String(value),
+  }));
+};
+
+export const formatLabelMap = (labels?: unknown): string => {
+  const rows = readLabels(labels);
+  return rows.length > 0 ? rows.map((row) => `${row.key}=${row.value}`).join(', ') : '—';
+};
 
 export const writeLabels = (rows: LabelDraft[]): Record<string, string> | undefined => {
   const labels: Record<string, string> = {};
@@ -525,13 +554,7 @@ export const emptyResource = (kind: SettingsKindCatalog, namespace?: string): KS
       kind: kind.kind,
       metadata,
       spec: {
-        container: writeContainer({
-          ...emptyContainer('storage-initializer'),
-          cpuRequest: '100m',
-          memoryRequest: '100Mi',
-          cpuLimit: '2',
-          memoryLimit: '4Gi',
-        }),
+        container: writeContainer(emptyContainer('storage-initializer')),
         supportedUriFormats: writeUriFormats(defaultStorageFormats()),
         workloadType: 'initContainer',
       },
@@ -552,40 +575,10 @@ export const emptyResource = (kind: SettingsKindCatalog, namespace?: string): KS
         writeContainer({
           ...emptyContainer('kserve-container'),
           args: ['--model_name={{.Name}}', '--model_dir=/mnt/models', '--http_port=8080'],
-          cpuRequest: '1',
-          memoryRequest: '2Gi',
-          cpuLimit: '1',
-          memoryLimit: '2Gi',
         }),
       ],
     },
   };
-};
-
-export const prometheusAnnotation = (resource: KServeSettingsResource, key: 'port' | 'path'): string => {
-  const annotations = asRecord(asRecord(resource.spec)?.annotations);
-  const full = key === 'port' ? 'prometheus.kserve.io/port' : 'prometheus.kserve.io/path';
-  return String(annotations?.[full] ?? '');
-};
-
-export const writePrometheusAnnotation = (
-  resource: KServeSettingsResource,
-  key: 'port' | 'path',
-  value: string,
-): void => {
-  const spec = ensureSpec(resource);
-  const annotations = { ...(asRecord(spec.annotations) ?? {}) };
-  const full = key === 'port' ? 'prometheus.kserve.io/port' : 'prometheus.kserve.io/path';
-  if (value.trim()) {
-    annotations[full] = value.trim();
-  } else {
-    delete annotations[full];
-  }
-  if (Object.keys(annotations).length === 0) {
-    delete spec.annotations;
-    return;
-  }
-  spec.annotations = annotations;
 };
 
 export const workerParallel = (resource: KServeSettingsResource, key: 'pipelineParallelSize' | 'tensorParallelSize'): string => {
@@ -659,13 +652,6 @@ export const uriFormatSummary = (resource: KServeSettingsResource): string => {
     .join(', ') || '—';
 };
 
-export const isRuntimeDisabled = (resource: KServeSettingsResource): boolean => {
-  if (resource.kind === 'ClusterStorageContainer') {
-    return resource.disabled === true;
-  }
-  return asRecord(resource.spec)?.disabled === true;
-};
-
 export const canEditSettingsKind = (kind: KServeSettingsKind, consoleRole: string): boolean => {
   if (kind === 'ServingRuntime') {
     return consoleRole === 'admin' || consoleRole === 'contributor';
@@ -682,19 +668,55 @@ export const runtimeDisplayName = (resource: KServeSettingsResource): string =>
   resource.metadata.annotations?.['openshift.io/display-name'] ??
   resource.metadata.name;
 
-export const runtimeVersionTag = (resource: KServeSettingsResource): string | undefined => {
-  const labels = resource.metadata.labels ?? {};
-  const versions = Object.entries(labels)
-    .filter((entry): entry is [string, string] => {
-      const [key, value] = entry;
-      return key.endsWith('.version') && typeof value === 'string' && value.trim() !== '';
-    })
-    .toSorted(([left], [right]) => left.localeCompare(right));
-  const value = versions[0]?.[1]?.trim();
-  if (!value) {
+const isVersionLabelKey = (key: string): boolean => {
+  const normalized = key.trim().toLowerCase();
+  return (
+    normalized === 'version' ||
+    normalized.endsWith('.version') ||
+    normalized.endsWith('/version')
+  );
+};
+
+const formatVersionTag = (value: unknown): string | undefined => {
+  if (typeof value !== 'string' && typeof value !== 'number') {
     return undefined;
   }
-  return value.startsWith('v') ? value : `v${value}`;
+  const text = String(value).trim();
+  if (!text) {
+    return undefined;
+  }
+  return text.startsWith('v') ? text : `v${text}`;
+};
+
+const versionFromLabelMap = (labels: unknown): string | undefined => {
+  const record = asRecord(labels);
+  if (!record) {
+    return undefined;
+  }
+  let fallback: string | undefined;
+  for (const [key, raw] of Object.entries(record)) {
+    if (!isVersionLabelKey(key)) {
+      continue;
+    }
+    const tag = formatVersionTag(raw);
+    if (!tag) {
+      continue;
+    }
+    if (key.trim().toLowerCase().endsWith('.version')) {
+      return tag;
+    }
+    fallback ??= tag;
+  }
+  return fallback;
+};
+
+export const runtimeVersionTag = (resource: KServeSettingsResource): string | undefined => {
+  const spec = asRecord(resource.spec);
+  return (
+    versionFromLabelMap(resource.metadata.labels) ??
+    versionFromLabelMap(spec?.labels) ??
+    versionFromLabelMap(resource.metadata.annotations)
+  );
 };
 
 export const servingPlatformLabel = (resource: KServeSettingsResource): string =>

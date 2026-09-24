@@ -12,12 +12,12 @@ import {
   FormSelectOption,
   HelperText,
   HelperTextItem,
+  Content,
   Modal,
   ModalBody,
   ModalFooter,
   ModalHeader,
   Radio,
-  Switch,
   TextArea,
   TextInput,
 } from '@patternfly/react-core';
@@ -38,7 +38,6 @@ import {
   emptyResource,
   ensureSpec,
   prepareForSave,
-  prometheusAnnotation,
   readContainer,
   readContainers,
   readContainersOrBlank,
@@ -52,7 +51,6 @@ import {
   writeContainers,
   writeLabels,
   writeModelFormats,
-  writePrometheusAnnotation,
   writeUriFormats,
   writeVolumes,
   writeWorkerParallel,
@@ -61,6 +59,7 @@ import {
   type LabelDraft,
   type ModelFormatDraft,
   type ProbeDraft,
+  type ResourceRowDraft,
   type UriFormatDraft,
   type VolumeDraft,
   type VolumeMountDraft,
@@ -118,6 +117,12 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
   const [labelRows, setLabelRows] = React.useState<LabelDraft[]>(() =>
     readLabels(resource?.metadata.labels),
   );
+  const [specLabelRows, setSpecLabelRows] = React.useState<LabelDraft[]>(() =>
+    readLabels(asRecord(resource?.spec)?.labels),
+  );
+  const [specAnnotationRows, setSpecAnnotationRows] = React.useState<LabelDraft[]>(() =>
+    readLabels(asRecord(resource?.spec)?.annotations),
+  );
 
   const isStorage = kind.kind === 'ClusterStorageContainer';
   const isRuntime = !isStorage;
@@ -146,6 +151,24 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
     applyDraft(next);
   };
 
+  const syncKeyValueRows = (parsed: KServeSettingsResource) => {
+    setLabelRows(readLabels(parsed.metadata.labels));
+    setSpecLabelRows(readLabels(asRecord(parsed.spec)?.labels));
+    setSpecAnnotationRows(readLabels(asRecord(parsed.spec)?.annotations));
+  };
+
+  const writeSpecMap = (field: 'labels' | 'annotations', rows: LabelDraft[]) => {
+    patchDraft((next) => {
+      const nextSpec = ensureSpec(next);
+      const written = writeLabels(rows);
+      if (written) {
+        nextSpec[field] = written;
+      } else {
+        delete nextSpec[field];
+      }
+    });
+  };
+
   const switchMode = (nextMode: EditorMode) => {
     setError(null);
     if (nextMode === 'yaml') {
@@ -162,7 +185,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
       parsed.apiVersion = parsed.apiVersion ?? kind.apiVersion;
       parsed.kind = parsed.kind ?? kind.kind;
       setDraft(parsed);
-      setLabelRows(readLabels(parsed.metadata.labels));
+      syncKeyValueRows(parsed);
       setManifestError(null);
       setMode(nextMode);
     } catch (err) {
@@ -182,7 +205,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
       parsed.apiVersion = parsed.apiVersion ?? kind.apiVersion;
       parsed.kind = parsed.kind ?? kind.kind;
       setDraft(parsed);
-      setLabelRows(readLabels(parsed.metadata.labels));
+      syncKeyValueRows(parsed);
       setManifestError(null);
     } catch (err) {
       setManifestError(err instanceof Error ? err.message : 'Could not parse YAML.');
@@ -230,6 +253,21 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
       const payload = prepareForSave(draft, kind);
       payload.metadata.name = name;
       payload.metadata.labels = writeLabels(labelRows);
+      if (!isStorage) {
+        const payloadSpec = ensureSpec(payload);
+        const nextSpecLabels = writeLabels(specLabelRows);
+        if (nextSpecLabels) {
+          payloadSpec.labels = nextSpecLabels;
+        } else {
+          delete payloadSpec.labels;
+        }
+        const nextSpecAnnotations = writeLabels(specAnnotationRows);
+        if (nextSpecAnnotations) {
+          payloadSpec.annotations = nextSpecAnnotations;
+        } else {
+          delete payloadSpec.annotations;
+        }
+      }
       if (mode === 'yaml') {
         const parsed = parseManifest(manifestText) as KServeSettingsResource;
         parsed.apiVersion = parsed.apiVersion ?? kind.apiVersion;
@@ -424,46 +462,99 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
 
   const renderResources = (container: ContainerDraft, onChange: (next: ContainerDraft) => void, idPrefix: string) => (
     <FormGroup label="Resources" fieldId={`${idPrefix}-resources`}>
-      <Flex spaceItems={{ default: 'spaceItemsMd' }} flexWrap={{ default: 'wrap' }}>
+      <FormHelperText>
+        <HelperText>
+          <HelperTextItem>
+            Optional. Empty values are omitted. Add a custom name for GPUs or other resources, for example
+            nvidia.com/gpu.
+          </HelperTextItem>
+        </HelperText>
+      </FormHelperText>
+      <Flex spaceItems={{ default: 'spaceItemsSm' }} style={{ marginTop: '0.5rem', fontWeight: 600 }}>
         <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
-          <TextInput
-            id={`${idPrefix}-cpu-request`}
-            value={container.cpuRequest}
-            onChange={(_event, value) => onChange({ ...container, cpuRequest: value })}
-            placeholder="CPU request"
-            aria-label="CPU request"
-          />
+          Resource
         </FlexItem>
-        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
-          <TextInput
-            id={`${idPrefix}-memory-request`}
-            value={container.memoryRequest}
-            onChange={(_event, value) => onChange({ ...container, memoryRequest: value })}
-            placeholder="Memory request"
-            aria-label="Memory request"
-          />
+        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
+          Request
         </FlexItem>
+        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
+          Limit
+        </FlexItem>
+        <FlexItem style={{ width: '2rem' }} />
       </Flex>
-      <Flex spaceItems={{ default: 'spaceItemsMd' }} flexWrap={{ default: 'wrap' }} style={{ marginTop: '0.5rem' }}>
-        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
-          <TextInput
-            id={`${idPrefix}-cpu-limit`}
-            value={container.cpuLimit}
-            onChange={(_event, value) => onChange({ ...container, cpuLimit: value })}
-            placeholder="CPU limit"
-            aria-label="CPU limit"
-          />
-        </FlexItem>
-        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
-          <TextInput
-            id={`${idPrefix}-memory-limit`}
-            value={container.memoryLimit}
-            onChange={(_event, value) => onChange({ ...container, memoryLimit: value })}
-            placeholder="Memory limit"
-            aria-label="Memory limit"
-          />
-        </FlexItem>
-      </Flex>
+      {container.resources.map((row, index) => (
+        <Flex
+          key={`${idPrefix}-resource-${index}`}
+          spaceItems={{ default: 'spaceItemsSm' }}
+          style={{ marginTop: '0.35rem' }}
+        >
+          <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
+            <TextInput
+              id={`${idPrefix}-resource-name-${index}`}
+              value={row.name}
+              onChange={(_event, value) => {
+                const resources: ResourceRowDraft[] = container.resources.map((item, itemIndex) =>
+                  itemIndex === index ? { ...item, name: value } : item,
+                );
+                onChange({ ...container, resources });
+              }}
+              placeholder="cpu"
+              aria-label={`Resource name ${index + 1}`}
+            />
+          </FlexItem>
+          <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
+            <TextInput
+              id={`${idPrefix}-resource-request-${index}`}
+              value={row.request}
+              onChange={(_event, value) => {
+                const resources: ResourceRowDraft[] = container.resources.map((item, itemIndex) =>
+                  itemIndex === index ? { ...item, request: value } : item,
+                );
+                onChange({ ...container, resources });
+              }}
+              placeholder="Request"
+              aria-label={`Resource request ${index + 1}`}
+            />
+          </FlexItem>
+          <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
+            <TextInput
+              id={`${idPrefix}-resource-limit-${index}`}
+              value={row.limit}
+              onChange={(_event, value) => {
+                const resources: ResourceRowDraft[] = container.resources.map((item, itemIndex) =>
+                  itemIndex === index ? { ...item, limit: value } : item,
+                );
+                onChange({ ...container, resources });
+              }}
+              placeholder="Limit"
+              aria-label={`Resource limit ${index + 1}`}
+            />
+          </FlexItem>
+          <FlexItem>
+            <Button
+              variant="plain"
+              icon={<MinusCircleIcon />}
+              onClick={() =>
+                onChange({
+                  ...container,
+                  resources: container.resources.filter((_item, itemIndex) => itemIndex !== index),
+                })
+              }
+              aria-label={`Remove resource ${index + 1}`}
+            />
+          </FlexItem>
+        </Flex>
+      ))}
+      <Button
+        variant="link"
+        icon={<PlusCircleIcon />}
+        onClick={() =>
+          onChange({ ...container, resources: [...container.resources, { name: '', request: '', limit: '' }] })
+        }
+        style={addLinkStyle}
+      >
+        Add resource
+      </Button>
     </FormGroup>
   );
 
@@ -690,9 +781,11 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
     onRemove?: () => void,
   ) => (
     <div style={cardStyle}>
-      <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }}>
+      <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
         <FlexItem>
-          <strong>{title}</strong>
+          <Content component="h3" style={{ margin: 0, fontSize: '1rem' }}>
+            {title}
+          </Content>
         </FlexItem>
         {onRemove ? (
           <FlexItem>
@@ -700,7 +793,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
           </FlexItem>
         ) : null}
       </Flex>
-      <FormGroup label="Container name" isRequired fieldId={`${idPrefix}-name`}>
+      <FormGroup label="Name" isRequired fieldId={`${idPrefix}-name`}>
         <TextInput
           id={`${idPrefix}-name`}
           value={container.name}
@@ -749,45 +842,67 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
     </div>
   );
 
-  const renderLabels = () => (
-    <FormGroup label="Labels" fieldId="settings-labels">
-      {labelRows.map((row, index) => (
-        <Flex key={`label-${index}`} spaceItems={{ default: 'spaceItemsSm' }} style={{ marginTop: index === 0 ? 0 : '0.35rem' }}>
-          <FlexItem grow={{ default: 'grow' }}>
-            <TextInput
-              value={row.key}
-              onChange={(_event, value) =>
-                setLabelRows(labelRows.map((item, itemIndex) => (itemIndex === index ? { ...item, key: value } : item)))
-              }
-              placeholder="Key"
-              aria-label={`Label key ${index + 1}`}
-            />
-          </FlexItem>
-          <FlexItem grow={{ default: 'grow' }}>
-            <TextInput
-              value={row.value}
-              onChange={(_event, value) =>
-                setLabelRows(labelRows.map((item, itemIndex) => (itemIndex === index ? { ...item, value } : item)))
-              }
-              placeholder="Value"
-              aria-label={`Label value ${index + 1}`}
-            />
-          </FlexItem>
-          <FlexItem>
-            <Button
-              variant="plain"
-              icon={<MinusCircleIcon />}
-              onClick={() => setLabelRows(labelRows.filter((_item, itemIndex) => itemIndex !== index))}
-              aria-label={`Remove label ${index + 1}`}
-            />
-          </FlexItem>
-        </Flex>
-      ))}
-      <Button variant="link" icon={<PlusCircleIcon />} onClick={() => setLabelRows([...labelRows, { key: '', value: '' }])} style={addLinkStyle}>
-        Add label
-      </Button>
-    </FormGroup>
-  );
+  const renderKeyValue = (
+    title: string,
+    fieldId: string,
+    rows: LabelDraft[],
+    setRows: React.Dispatch<React.SetStateAction<LabelDraft[]>>,
+    addText: string,
+    onCommit?: (nextRows: LabelDraft[]) => void,
+  ) => {
+    const update = (nextRows: LabelDraft[]) => {
+      setRows(nextRows);
+      onCommit?.(nextRows);
+    };
+    return (
+      <FormGroup label={title} fieldId={fieldId}>
+        {rows.map((row, index) => (
+          <Flex
+            key={`${fieldId}-${index}`}
+            spaceItems={{ default: 'spaceItemsSm' }}
+            style={{ marginTop: index === 0 ? 0 : '0.35rem' }}
+          >
+            <FlexItem grow={{ default: 'grow' }}>
+              <TextInput
+                value={row.key}
+                onChange={(_event, value) =>
+                  update(rows.map((item, itemIndex) => (itemIndex === index ? { ...item, key: value } : item)))
+                }
+                placeholder="Key"
+                aria-label={`${title} key ${index + 1}`}
+              />
+            </FlexItem>
+            <FlexItem grow={{ default: 'grow' }}>
+              <TextInput
+                value={row.value}
+                onChange={(_event, value) =>
+                  update(rows.map((item, itemIndex) => (itemIndex === index ? { ...item, value } : item)))
+                }
+                placeholder="Value"
+                aria-label={`${title} value ${index + 1}`}
+              />
+            </FlexItem>
+            <FlexItem>
+              <Button
+                variant="plain"
+                icon={<MinusCircleIcon />}
+                onClick={() => update(rows.filter((_item, itemIndex) => itemIndex !== index))}
+                aria-label={`Remove ${title} ${index + 1}`}
+              />
+            </FlexItem>
+          </Flex>
+        ))}
+        <Button
+          variant="link"
+          icon={<PlusCircleIcon />}
+          onClick={() => update([...rows, { key: '', value: '' }])}
+          style={addLinkStyle}
+        >
+          {addText}
+        </Button>
+      </FormGroup>
+    );
+  };
 
   return (
     <Modal
@@ -855,10 +970,39 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                   isDisabled={isEdit}
                 />
               </FormGroup>
-              {renderLabels()}
+              {renderKeyValue('Labels', 'settings-labels', labelRows, setLabelRows, 'Add label', (rows) =>
+                patchDraft((next) => {
+                  next.metadata.labels = writeLabels(rows);
+                }),
+              )}
+              {isRuntime
+                ? renderKeyValue(
+                    'Spec labels',
+                    'settings-spec-labels',
+                    specLabelRows,
+                    setSpecLabelRows,
+                    'Add spec label',
+                    (rows) => writeSpecMap('labels', rows),
+                  )
+                : null}
+              {isRuntime
+                ? renderKeyValue(
+                    'Spec annotations',
+                    'settings-spec-annotations',
+                    specAnnotationRows,
+                    setSpecAnnotationRows,
+                    'Add spec annotation',
+                    (rows) => writeSpecMap('annotations', rows),
+                  )
+                : null}
               {isStorage ? (
                 <>
-                  {renderContainerBasics('Storage initializer', storageContainer, writeStorageContainer, 'storage')}
+                  {renderContainerBasics(
+                    storageContainer.name.trim() || 'Storage initializer',
+                    storageContainer,
+                    writeStorageContainer,
+                    'storage',
+                  )}
                   <FormGroup label="Supported URI formats" isRequired fieldId="settings-uri">
                     {uriFormats.map((row, index) => (
                       <Flex key={`uri-${index}`} spaceItems={{ default: 'spaceItemsSm' }} style={{ marginTop: index === 0 ? 0 : '0.35rem' }}>
@@ -945,26 +1089,6 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
               ) : null}
               {isRuntime ? (
                 <>
-                  <FormGroup label="Prometheus port" fieldId="settings-prom-port">
-                    <TextInput
-                      id="settings-prom-port"
-                      value={prometheusAnnotation(draft, 'port')}
-                      onChange={(_event, value) =>
-                        patchDraft((next) => writePrometheusAnnotation(next, 'port', value))
-                      }
-                      placeholder="8080"
-                    />
-                  </FormGroup>
-                  <FormGroup label="Prometheus path" fieldId="settings-prom-path">
-                    <TextInput
-                      id="settings-prom-path"
-                      value={prometheusAnnotation(draft, 'path')}
-                      onChange={(_event, value) =>
-                        patchDraft((next) => writePrometheusAnnotation(next, 'path', value))
-                      }
-                      placeholder="/metrics"
-                    />
-                  </FormGroup>
                   <FormGroup label="Supported model formats" isRequired fieldId="settings-formats">
                     {modelFormats.map((row, index) => (
                       <div key={`format-${index}`} style={cardStyle}>
@@ -1094,7 +1218,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                   {runtimeContainers.map((container, index) => (
                     <React.Fragment key={`runtime-container-${index}`}>
                       {renderContainerBasics(
-                        `Container ${index + 1}`,
+                        container.name.trim() || 'Container',
                         container,
                         (nextContainer) =>
                           writeRuntimeContainers(
@@ -1169,7 +1293,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                   {workerContainers.map((container, index) => (
                     <React.Fragment key={`worker-${index}`}>
                       {renderContainerBasics(
-                        `Worker container ${index + 1}`,
+                        container.name.trim() || 'Worker',
                         container,
                         (nextContainer) =>
                           writeWorkerContainers(
@@ -1214,31 +1338,6 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                   )}
                 </>
               ) : null}
-              <FormGroup fieldId="settings-disabled" style={{ marginTop: '1rem' }}>
-                <Switch
-                  id="settings-disabled"
-                  label="Disabled"
-                  isChecked={isStorage ? draft.disabled === true : spec.disabled === true}
-                  onChange={(_event, checked) =>
-                    patchDraft((next) => {
-                      if (isStorage) {
-                        if (checked) {
-                          next.disabled = true;
-                        } else {
-                          delete next.disabled;
-                        }
-                        return;
-                      }
-                      const nextSpec = ensureSpec(next);
-                      if (checked) {
-                        nextSpec.disabled = true;
-                      } else {
-                        delete nextSpec.disabled;
-                      }
-                    })
-                  }
-                />
-              </FormGroup>
             </>
           ) : (
             <FormGroup label="YAML" isRequired fieldId="settings-manifest">
