@@ -40,6 +40,7 @@ import {
   formatLabelMap,
   isPreInstalled,
   modelFormatSummary,
+  runtimeEngineTags,
   runtimeVersionTag,
   uriFormatSummary,
 } from './helpers';
@@ -109,6 +110,8 @@ const ResourceDetails: React.FC = () => {
 
   const resolvedKind = item?.kind ? settingsKindByName(item.kind) : kind;
   const spec = asRecord(item?.spec);
+  const engines = item ? runtimeEngineTags(item) : [];
+  const version = item ? runtimeVersionTag(item) : undefined;
 
   return (
     <>
@@ -124,17 +127,24 @@ const ResourceDetails: React.FC = () => {
         </Breadcrumb>
         <Content component="h1">{name}</Content>
         <Content component="p">{resolvedKind.kind}</Content>
-        {item && (isPreInstalled(item) || runtimeVersionTag(item)) ? (
+        {item && (isPreInstalled(item) || engines.length > 0 || version) ? (
           <Flex spaceItems={{ default: 'spaceItemsSm' }} style={{ marginTop: '0.5rem' }}>
             {isPreInstalled(item) ? (
               <FlexItem>
                 <Label isCompact>Pre-installed</Label>
               </FlexItem>
             ) : null}
-            {runtimeVersionTag(item) ? (
+            {engines.map((engine) => (
+              <FlexItem key={`engine-${engine}`}>
+                <Label color="cyan" isCompact>
+                  {engine}
+                </Label>
+              </FlexItem>
+            ))}
+            {version ? (
               <FlexItem>
                 <Label color="blue" isCompact>
-                  {runtimeVersionTag(item)}
+                  {version}
                 </Label>
               </FlexItem>
             ) : null}

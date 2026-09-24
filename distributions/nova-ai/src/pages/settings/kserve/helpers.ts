@@ -46,6 +46,11 @@ export type VolumeDraft = {
   sizeLimit: string;
 };
 
+export type HttpHeaderDraft = {
+  name: string;
+  value: string;
+};
+
 export type ProbeDraft = {
   enabled: boolean;
   failureThreshold: string;
@@ -53,7 +58,17 @@ export type ProbeDraft = {
   successThreshold: string;
   timeoutSeconds: string;
   initialDelaySeconds: string;
-  execCommand: string;
+  terminationGracePeriodSeconds: string;
+  execCommand: string[];
+  httpGetPath: string;
+  httpGetPort: string;
+  httpGetHost: string;
+  httpGetScheme: string;
+  httpGetHeaders: HttpHeaderDraft[];
+  tcpHost: string;
+  tcpPort: string;
+  grpcPort: string;
+  grpcService: string;
 };
 
 export type SecurityDraft = {
@@ -90,6 +105,8 @@ const defaultSecurity = (): SecurityDraft => ({
   dropCapabilities: ['ALL'],
 });
 
+export const DEFAULT_CONTAINER_NAME = 'containers';
+
 export const emptyProbe = (): ProbeDraft => ({
   enabled: false,
   failureThreshold: '',
@@ -97,7 +114,17 @@ export const emptyProbe = (): ProbeDraft => ({
   successThreshold: '',
   timeoutSeconds: '',
   initialDelaySeconds: '',
-  execCommand: '',
+  terminationGracePeriodSeconds: '',
+  execCommand: [],
+  httpGetPath: '',
+  httpGetPort: '',
+  httpGetHost: '',
+  httpGetScheme: '',
+  httpGetHeaders: [],
+  tcpHost: '',
+  tcpPort: '',
+  grpcPort: '',
+  grpcService: '',
 });
 
 export const emptyResourceRows = (): ResourceRowDraft[] => [
@@ -105,7 +132,7 @@ export const emptyResourceRows = (): ResourceRowDraft[] => [
   { name: 'memory', request: '', limit: '' },
 ];
 
-export const emptyContainer = (name = 'kserve-container'): ContainerDraft => ({
+export const emptyContainer = (name = DEFAULT_CONTAINER_NAME): ContainerDraft => ({
   name,
   image: '',
   args: [],
@@ -237,20 +264,65 @@ const writeSecurity = (draft: SecurityDraft): Record<string, unknown> => {
   return security;
 };
 
+const optionalString = (value: unknown): string =>
+  value === undefined || value === null ? '' : String(value);
+
+const readHttpHeaders = (value: unknown): HttpHeaderDraft[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((item) => {
+    const header = asRecord(item);
+    return {
+      name: String(header?.name ?? ''),
+      value: String(header?.value ?? ''),
+    };
+  });
+};
+
+const writeHttpHeaders = (rows: HttpHeaderDraft[]): unknown[] | undefined => {
+  const headers = rows
+    .map((row) => ({ name: row.name.trim(), value: row.value }))
+    .filter((row) => row.name !== '');
+  return headers.length > 0 ? headers : undefined;
+};
+
+const writePort = (raw: string): string | number | undefined => {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  return Number.isNaN(parsed) || !/^-?\d+$/.test(trimmed) ? trimmed : parsed;
+};
+
 const readProbe = (value: unknown): ProbeDraft => {
   const probe = asRecord(value);
   if (!probe) {
     return emptyProbe();
   }
-  const command = stringList(asRecord(probe.exec)?.command);
+  const exec = asRecord(probe.exec);
+  const httpGet = asRecord(probe.httpGet);
+  const tcpSocket = asRecord(probe.tcpSocket);
+  const grpc = asRecord(probe.grpc);
   return {
     enabled: true,
-    failureThreshold: probe.failureThreshold === undefined ? '' : String(probe.failureThreshold),
-    periodSeconds: probe.periodSeconds === undefined ? '' : String(probe.periodSeconds),
-    successThreshold: probe.successThreshold === undefined ? '' : String(probe.successThreshold),
-    timeoutSeconds: probe.timeoutSeconds === undefined ? '' : String(probe.timeoutSeconds),
-    initialDelaySeconds: probe.initialDelaySeconds === undefined ? '' : String(probe.initialDelaySeconds),
-    execCommand: command.join('\n'),
+    failureThreshold: optionalString(probe.failureThreshold),
+    periodSeconds: optionalString(probe.periodSeconds),
+    successThreshold: optionalString(probe.successThreshold),
+    timeoutSeconds: optionalString(probe.timeoutSeconds),
+    initialDelaySeconds: optionalString(probe.initialDelaySeconds),
+    terminationGracePeriodSeconds: optionalString(probe.terminationGracePeriodSeconds),
+    execCommand: Array.isArray(exec?.command) ? exec.command.map((item) => String(item)) : [],
+    httpGetPath: optionalString(httpGet?.path),
+    httpGetPort: optionalString(httpGet?.port),
+    httpGetHost: optionalString(httpGet?.host),
+    httpGetScheme: optionalString(httpGet?.scheme),
+    httpGetHeaders: readHttpHeaders(httpGet?.httpHeaders),
+    tcpHost: optionalString(tcpSocket?.host),
+    tcpPort: optionalString(tcpSocket?.port),
+    grpcPort: optionalString(grpc?.port),
+    grpcService: optionalString(grpc?.service),
   };
 };
 
@@ -264,22 +336,36 @@ const writeNumber = (raw: string): number | undefined => {
 };
 
 const writeProbe = (draft: ProbeDraft): Record<string, unknown> | undefined => {
-  const command = draft.execCommand
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter((line, index, lines) => line !== '' || (index > 0 && index < lines.length - 1));
+  const command = draft.execCommand.map((item) => item.replace(/\s+$/, '')).filter((item) => item !== '');
   const failureThreshold = writeNumber(draft.failureThreshold);
   const periodSeconds = writeNumber(draft.periodSeconds);
   const successThreshold = writeNumber(draft.successThreshold);
   const timeoutSeconds = writeNumber(draft.timeoutSeconds);
   const initialDelaySeconds = writeNumber(draft.initialDelaySeconds);
+  const terminationGracePeriodSeconds = writeNumber(draft.terminationGracePeriodSeconds);
+  const httpGetPort = writePort(draft.httpGetPort);
+  const tcpPort = writePort(draft.tcpPort);
+  const grpcPort = writeNumber(draft.grpcPort);
+  const httpHeaders = writeHttpHeaders(draft.httpGetHeaders);
+  const hasHttpGet =
+    Boolean(draft.httpGetPath.trim()) ||
+    httpGetPort !== undefined ||
+    Boolean(draft.httpGetHost.trim()) ||
+    Boolean(draft.httpGetScheme.trim()) ||
+    Boolean(httpHeaders);
+  const hasTcp = Boolean(draft.tcpHost.trim()) || tcpPort !== undefined;
+  const hasGrpc = grpcPort !== undefined || Boolean(draft.grpcService.trim());
   if (
     command.length === 0 &&
     failureThreshold === undefined &&
     periodSeconds === undefined &&
     successThreshold === undefined &&
     timeoutSeconds === undefined &&
-    initialDelaySeconds === undefined
+    initialDelaySeconds === undefined &&
+    terminationGracePeriodSeconds === undefined &&
+    !hasHttpGet &&
+    !hasTcp &&
+    !hasGrpc
   ) {
     return undefined;
   }
@@ -299,8 +385,50 @@ const writeProbe = (draft: ProbeDraft): Record<string, unknown> | undefined => {
   if (initialDelaySeconds !== undefined) {
     probe.initialDelaySeconds = initialDelaySeconds;
   }
+  if (terminationGracePeriodSeconds !== undefined) {
+    probe.terminationGracePeriodSeconds = terminationGracePeriodSeconds;
+  }
   if (command.length > 0) {
     probe.exec = { command };
+  }
+  if (hasHttpGet) {
+    const httpGet: Record<string, unknown> = {};
+    if (draft.httpGetPath.trim()) {
+      httpGet.path = draft.httpGetPath.trim();
+    }
+    if (httpGetPort !== undefined) {
+      httpGet.port = httpGetPort;
+    }
+    if (draft.httpGetHost.trim()) {
+      httpGet.host = draft.httpGetHost.trim();
+    }
+    if (draft.httpGetScheme.trim()) {
+      httpGet.scheme = draft.httpGetScheme.trim();
+    }
+    if (httpHeaders) {
+      httpGet.httpHeaders = httpHeaders;
+    }
+    probe.httpGet = httpGet;
+  }
+  if (hasTcp) {
+    const tcpSocket: Record<string, unknown> = {};
+    if (draft.tcpHost.trim()) {
+      tcpSocket.host = draft.tcpHost.trim();
+    }
+    if (tcpPort !== undefined) {
+      tcpSocket.port = tcpPort;
+    }
+    probe.tcpSocket = tcpSocket;
+  }
+  if (hasGrpc) {
+    const grpc: Record<string, unknown> = {};
+    if (grpcPort !== undefined) {
+      grpc.port = grpcPort;
+    }
+    if (draft.grpcService.trim()) {
+      grpc.service = draft.grpcService.trim();
+    }
+    probe.grpc = grpc;
   }
   return Object.keys(probe).length > 0 ? probe : undefined;
 };
@@ -385,7 +513,7 @@ export const writeContainer = (draft: ContainerDraft, strict = false): Record<st
     return null;
   }
   const container: Record<string, unknown> = {
-    name: draft.name.trim() || (strict ? 'kserve-container' : draft.name) || 'kserve-container',
+    name: draft.name.trim() || (strict ? DEFAULT_CONTAINER_NAME : draft.name) || DEFAULT_CONTAINER_NAME,
   };
   if (draft.image.trim() || !strict) {
     if (draft.image.trim()) {
@@ -573,7 +701,7 @@ export const emptyResource = (kind: SettingsKindCatalog, namespace?: string): KS
       protocolVersions: [...PROTOCOL_VERSIONS].slice(0, 2),
       containers: [
         writeContainer({
-          ...emptyContainer('kserve-container'),
+          ...emptyContainer(DEFAULT_CONTAINER_NAME),
           args: ['--model_name={{.Name}}', '--model_dir=/mnt/models', '--http_port=8080'],
         }),
       ],
@@ -688,35 +816,56 @@ const formatVersionTag = (value: unknown): string | undefined => {
   return text.startsWith('v') ? text : `v${text}`;
 };
 
-const versionFromLabelMap = (labels: unknown): string | undefined => {
+const versionLabelsFromMap = (labels: unknown): Array<{ engine?: string; version: string }> => {
   const record = asRecord(labels);
   if (!record) {
-    return undefined;
+    return [];
   }
-  let fallback: string | undefined;
+  const items: Array<{ engine?: string; version: string }> = [];
   for (const [key, raw] of Object.entries(record)) {
     if (!isVersionLabelKey(key)) {
       continue;
     }
-    const tag = formatVersionTag(raw);
-    if (!tag) {
+    const version = formatVersionTag(raw);
+    if (!version) {
       continue;
     }
-    if (key.trim().toLowerCase().endsWith('.version')) {
-      return tag;
-    }
-    fallback ??= tag;
+    const normalized = key.trim();
+    const dotted = normalized.toLowerCase().endsWith('.version');
+    const engine = dotted ? normalized.slice(0, -'.version'.length).trim() : undefined;
+    items.push({ engine: engine || undefined, version });
   }
-  return fallback;
+  return items;
 };
 
-export const runtimeVersionTag = (resource: KServeSettingsResource): string | undefined => {
+const versionLabelsFor = (resource: KServeSettingsResource): Array<{ engine?: string; version: string }> => {
   const spec = asRecord(resource.spec);
-  return (
-    versionFromLabelMap(resource.metadata.labels) ??
-    versionFromLabelMap(spec?.labels) ??
-    versionFromLabelMap(resource.metadata.annotations)
-  );
+  return [
+    ...versionLabelsFromMap(resource.metadata.labels),
+    ...versionLabelsFromMap(spec?.labels),
+    ...versionLabelsFromMap(resource.metadata.annotations),
+  ];
+};
+
+export const runtimeVersionTag = (resource: KServeSettingsResource): string | undefined =>
+  versionLabelsFor(resource)[0]?.version;
+
+export const runtimeEngineTags = (resource: KServeSettingsResource): string[] => {
+  const tags: string[] = [];
+  const seen = new Set<string>();
+  versionLabelsFor(resource).forEach((item) => {
+    const engine = item.engine?.trim();
+    if (!engine) {
+      return;
+    }
+    const key = engine.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    tags.push(engine);
+  });
+  return tags;
 };
 
 export const servingPlatformLabel = (resource: KServeSettingsResource): string =>
@@ -777,7 +926,7 @@ export const prepareForSave = (
     if (formats) {
       spec.supportedModelFormats = formats;
     }
-    const containers = writeContainers(readContainers(spec.containers, 'kserve-container'), true);
+    const containers = writeContainers(readContainers(spec.containers, DEFAULT_CONTAINER_NAME), true);
     if (containers) {
       spec.containers = containers;
     }

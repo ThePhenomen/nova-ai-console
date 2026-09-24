@@ -13,6 +13,7 @@ import {
   HelperText,
   HelperTextItem,
   Content,
+  ExpandableSection,
   Modal,
   ModalBody,
   ModalFooter,
@@ -34,12 +35,12 @@ import {
 } from './catalog';
 import {
   asRecord,
+  DEFAULT_CONTAINER_NAME,
   emptyContainer,
   emptyResource,
   ensureSpec,
   prepareForSave,
   readContainer,
-  readContainers,
   readContainersOrBlank,
   readLabels,
   readModelFormats,
@@ -56,6 +57,7 @@ import {
   writeWorkerParallel,
   type ContainerDraft,
   type EnvDraft,
+  type HttpHeaderDraft,
   type LabelDraft,
   type ModelFormatDraft,
   type ProbeDraft,
@@ -128,8 +130,8 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
   const isRuntime = !isStorage;
   const spec = asRecord(draft.spec) ?? {};
   const storageContainer = readContainer(spec.container, 'storage-initializer');
-  const runtimeContainers = readContainersOrBlank(spec.containers, 'kserve-container');
-  const workerContainers = readContainers(
+  const runtimeContainers = readContainersOrBlank(spec.containers, DEFAULT_CONTAINER_NAME);
+  const workerContainers = readContainersOrBlank(
     asRecord(spec.workerSpec)?.containers,
     'worker-container',
   );
@@ -238,7 +240,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
     }
     if (kind.kind !== 'ClusterStorageContainer' && mode === 'fields') {
       const formats = writeModelFormats(readModelFormats(asRecord(draft.spec)?.supportedModelFormats));
-      const containers = readContainersOrBlank(asRecord(draft.spec)?.containers, 'kserve-container');
+      const containers = readContainersOrBlank(asRecord(draft.spec)?.containers, DEFAULT_CONTAINER_NAME);
       if (!formats || formats.length === 0) {
         setError('Add at least one supported model format.');
         return;
@@ -599,63 +601,188 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
     probe: ProbeDraft,
     onChange: (next: ProbeDraft) => void,
     idPrefix: string,
-  ) => (
-    <FormGroup label={title} fieldId={`${idPrefix}-exec`}>
-      <FormHelperText>
-        <HelperText>
-          <HelperTextItem>Optional. Leave empty to omit this probe.</HelperTextItem>
-        </HelperText>
-      </FormHelperText>
-      <Flex spaceItems={{ default: 'spaceItemsMd' }} flexWrap={{ default: 'wrap' }} style={{ marginTop: '0.5rem' }}>
-        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
+  ) => {
+    const patch = (partial: Partial<ProbeDraft>) => onChange({ ...probe, enabled: true, ...partial });
+    return (
+      <ExpandableSection
+        toggleText={title}
+        isExpanded={probe.enabled}
+        onToggle={(_event, expanded) => onChange({ ...probe, enabled: expanded })}
+        style={{ marginTop: '0.75rem' }}
+      >
+        <FormGroup label="Failure threshold" fieldId={`${idPrefix}-failure`}>
           <TextInput
             id={`${idPrefix}-failure`}
             value={probe.failureThreshold}
-            onChange={(_event, value) => onChange({ ...probe, enabled: true, failureThreshold: value })}
-            placeholder="Failure threshold"
-            aria-label={`${title} failure threshold`}
+            onChange={(_event, value) => patch({ failureThreshold: value })}
+            placeholder="2"
           />
-        </FlexItem>
-        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
+        </FormGroup>
+        <FormGroup label="Period seconds" fieldId={`${idPrefix}-period`}>
           <TextInput
             id={`${idPrefix}-period`}
             value={probe.periodSeconds}
-            onChange={(_event, value) => onChange({ ...probe, enabled: true, periodSeconds: value })}
-            placeholder="Period seconds"
-            aria-label={`${title} period seconds`}
+            onChange={(_event, value) => patch({ periodSeconds: value })}
+            placeholder="5"
           />
-        </FlexItem>
-        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
+        </FormGroup>
+        <FormGroup label="Success threshold" fieldId={`${idPrefix}-success`}>
+          <TextInput
+            id={`${idPrefix}-success`}
+            value={probe.successThreshold}
+            onChange={(_event, value) => patch({ successThreshold: value })}
+            placeholder="1"
+          />
+        </FormGroup>
+        <FormGroup label="Timeout seconds" fieldId={`${idPrefix}-timeout`}>
           <TextInput
             id={`${idPrefix}-timeout`}
             value={probe.timeoutSeconds}
-            onChange={(_event, value) => onChange({ ...probe, enabled: true, timeoutSeconds: value })}
-            placeholder="Timeout seconds"
-            aria-label={`${title} timeout seconds`}
+            onChange={(_event, value) => patch({ timeoutSeconds: value })}
+            placeholder="15"
           />
-        </FlexItem>
-        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
+        </FormGroup>
+        <FormGroup label="Initial delay seconds" fieldId={`${idPrefix}-initial`}>
           <TextInput
             id={`${idPrefix}-initial`}
             value={probe.initialDelaySeconds}
-            onChange={(_event, value) => onChange({ ...probe, enabled: true, initialDelaySeconds: value })}
-            placeholder="Initial delay seconds"
-            aria-label={`${title} initial delay`}
+            onChange={(_event, value) => patch({ initialDelaySeconds: value })}
+            placeholder="60"
           />
-        </FlexItem>
-      </Flex>
-      <TextArea
-        id={`${idPrefix}-exec`}
-        value={probe.execCommand}
-        onChange={(_event, value) => onChange({ ...probe, enabled: true, execCommand: value })}
-        rows={4}
-        resizeOrientation="vertical"
-        placeholder={'bash\n-c\npython ./health_check.py ...'}
-        aria-label={`${title} exec command`}
-        style={{ marginTop: '0.5rem' }}
-      />
-    </FormGroup>
-  );
+        </FormGroup>
+        <FormGroup label="Termination grace period seconds" fieldId={`${idPrefix}-grace`}>
+          <TextInput
+            id={`${idPrefix}-grace`}
+            value={probe.terminationGracePeriodSeconds}
+            onChange={(_event, value) => patch({ terminationGracePeriodSeconds: value })}
+          />
+        </FormGroup>
+        {renderStringList(
+          'Exec command',
+          `${idPrefix}-exec`,
+          probe.execCommand,
+          (execCommand) => patch({ execCommand }),
+          'bash',
+          true,
+        )}
+        <FormGroup label="HTTP GET path" fieldId={`${idPrefix}-http-path`}>
+          <TextInput
+            id={`${idPrefix}-http-path`}
+            value={probe.httpGetPath}
+            onChange={(_event, value) => patch({ httpGetPath: value })}
+            placeholder="/health"
+          />
+        </FormGroup>
+        <FormGroup label="HTTP GET port" fieldId={`${idPrefix}-http-port`}>
+          <TextInput
+            id={`${idPrefix}-http-port`}
+            value={probe.httpGetPort}
+            onChange={(_event, value) => patch({ httpGetPort: value })}
+            placeholder="8080"
+          />
+        </FormGroup>
+        <FormGroup label="HTTP GET host" fieldId={`${idPrefix}-http-host`}>
+          <TextInput
+            id={`${idPrefix}-http-host`}
+            value={probe.httpGetHost}
+            onChange={(_event, value) => patch({ httpGetHost: value })}
+          />
+        </FormGroup>
+        <FormGroup label="HTTP GET scheme" fieldId={`${idPrefix}-http-scheme`}>
+          <TextInput
+            id={`${idPrefix}-http-scheme`}
+            value={probe.httpGetScheme}
+            onChange={(_event, value) => patch({ httpGetScheme: value })}
+            placeholder="HTTP"
+          />
+        </FormGroup>
+        <FormGroup label="HTTP GET headers" fieldId={`${idPrefix}-http-headers`}>
+          {probe.httpGetHeaders.map((row, index) => (
+            <Flex
+              key={`${idPrefix}-header-${index}`}
+              spaceItems={{ default: 'spaceItemsSm' }}
+              style={{ marginTop: index === 0 ? 0 : '0.35rem' }}
+            >
+              <FlexItem grow={{ default: 'grow' }}>
+                <TextInput
+                  value={row.name}
+                  onChange={(_event, value) => {
+                    const httpGetHeaders: HttpHeaderDraft[] = probe.httpGetHeaders.map((item, itemIndex) =>
+                      itemIndex === index ? { ...item, name: value } : item,
+                    );
+                    patch({ httpGetHeaders });
+                  }}
+                  placeholder="Name"
+                  aria-label={`${title} header name ${index + 1}`}
+                />
+              </FlexItem>
+              <FlexItem grow={{ default: 'grow' }}>
+                <TextInput
+                  value={row.value}
+                  onChange={(_event, value) => {
+                    const httpGetHeaders: HttpHeaderDraft[] = probe.httpGetHeaders.map((item, itemIndex) =>
+                      itemIndex === index ? { ...item, value } : item,
+                    );
+                    patch({ httpGetHeaders });
+                  }}
+                  placeholder="Value"
+                  aria-label={`${title} header value ${index + 1}`}
+                />
+              </FlexItem>
+              <FlexItem>
+                <Button
+                  variant="plain"
+                  icon={<MinusCircleIcon />}
+                  onClick={() =>
+                    patch({
+                      httpGetHeaders: probe.httpGetHeaders.filter((_item, itemIndex) => itemIndex !== index),
+                    })
+                  }
+                  aria-label={`Remove ${title} header ${index + 1}`}
+                />
+              </FlexItem>
+            </Flex>
+          ))}
+          <Button
+            variant="link"
+            icon={<PlusCircleIcon />}
+            onClick={() => patch({ httpGetHeaders: [...probe.httpGetHeaders, { name: '', value: '' }] })}
+            style={addLinkStyle}
+          >
+            Add header
+          </Button>
+        </FormGroup>
+        <FormGroup label="TCP socket host" fieldId={`${idPrefix}-tcp-host`}>
+          <TextInput
+            id={`${idPrefix}-tcp-host`}
+            value={probe.tcpHost}
+            onChange={(_event, value) => patch({ tcpHost: value })}
+          />
+        </FormGroup>
+        <FormGroup label="TCP socket port" fieldId={`${idPrefix}-tcp-port`}>
+          <TextInput
+            id={`${idPrefix}-tcp-port`}
+            value={probe.tcpPort}
+            onChange={(_event, value) => patch({ tcpPort: value })}
+          />
+        </FormGroup>
+        <FormGroup label="gRPC port" fieldId={`${idPrefix}-grpc-port`}>
+          <TextInput
+            id={`${idPrefix}-grpc-port`}
+            value={probe.grpcPort}
+            onChange={(_event, value) => patch({ grpcPort: value })}
+          />
+        </FormGroup>
+        <FormGroup label="gRPC service" fieldId={`${idPrefix}-grpc-service`}>
+          <TextInput
+            id={`${idPrefix}-grpc-service`}
+            value={probe.grpcService}
+            onChange={(_event, value) => patch({ grpcService: value })}
+          />
+        </FormGroup>
+      </ExpandableSection>
+    );
+  };
 
   const renderVolumeMounts = (container: ContainerDraft, onChange: (next: ContainerDraft) => void, idPrefix: string) => (
     <FormGroup label="Volume mounts" fieldId={`${idPrefix}-mounts`}>
@@ -1215,6 +1342,9 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                       ))}
                     </Flex>
                   </FormGroup>
+                  <Content component="h3" style={{ marginTop: '1rem', marginBottom: 0 }}>
+                    Containers
+                  </Content>
                   {runtimeContainers.map((container, index) => (
                     <React.Fragment key={`runtime-container-${index}`}>
                       {renderContainerBasics(
@@ -1236,7 +1366,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                   <Button
                     variant="link"
                     icon={<PlusCircleIcon />}
-                    onClick={() => writeRuntimeContainers([...runtimeContainers, emptyContainer('kserve-container')])}
+                    onClick={() => writeRuntimeContainers([...runtimeContainers, emptyContainer(DEFAULT_CONTAINER_NAME)])}
                     style={addLinkStyle}
                   >
                     Add container
@@ -1252,48 +1382,37 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                       }
                     }),
                   )}
-                  <FormGroup label="Worker spec" fieldId="settings-worker">
-                    <FormHelperText>
-                      <HelperText>
-                        <HelperTextItem>
-                          Optional multi-node worker. Pipeline and tensor parallel sizes are integers starting at 1.
-                          Worker containers use the same fields as the main containers, including probes.
-                        </HelperTextItem>
-                      </HelperText>
-                    </FormHelperText>
-                    <Flex spaceItems={{ default: 'spaceItemsMd' }} flexWrap={{ default: 'wrap' }} style={{ marginTop: '0.5rem' }}>
-                      <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
-                        <TextInput
-                          id="settings-pipeline-parallel"
-                          type="text"
-                          inputMode="numeric"
-                          value={workerParallel(draft, 'pipelineParallelSize')}
-                          onChange={(_event, value) =>
-                            patchDraft((next) => writeWorkerParallel(next, 'pipelineParallelSize', value))
-                          }
-                          placeholder="Pipeline parallel size"
-                          aria-label="Pipeline parallel size"
-                        />
-                      </FlexItem>
-                      <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
-                        <TextInput
-                          id="settings-tensor-parallel"
-                          type="text"
-                          inputMode="numeric"
-                          value={workerParallel(draft, 'tensorParallelSize')}
-                          onChange={(_event, value) =>
-                            patchDraft((next) => writeWorkerParallel(next, 'tensorParallelSize', value))
-                          }
-                          placeholder="Tensor parallel size"
-                          aria-label="Tensor parallel size"
-                        />
-                      </FlexItem>
-                    </Flex>
+                  <Content component="h3" style={{ marginTop: '1.25rem', marginBottom: 0 }}>
+                    Worker spec
+                  </Content>
+                  <FormGroup label="Pipeline parallel size" fieldId="settings-pipeline-parallel">
+                    <TextInput
+                      id="settings-pipeline-parallel"
+                      type="text"
+                      inputMode="numeric"
+                      value={workerParallel(draft, 'pipelineParallelSize')}
+                      onChange={(_event, value) =>
+                        patchDraft((next) => writeWorkerParallel(next, 'pipelineParallelSize', value))
+                      }
+                      placeholder="1"
+                    />
+                  </FormGroup>
+                  <FormGroup label="Tensor parallel size" fieldId="settings-tensor-parallel">
+                    <TextInput
+                      id="settings-tensor-parallel"
+                      type="text"
+                      inputMode="numeric"
+                      value={workerParallel(draft, 'tensorParallelSize')}
+                      onChange={(_event, value) =>
+                        patchDraft((next) => writeWorkerParallel(next, 'tensorParallelSize', value))
+                      }
+                      placeholder="1"
+                    />
                   </FormGroup>
                   {workerContainers.map((container, index) => (
                     <React.Fragment key={`worker-${index}`}>
                       {renderContainerBasics(
-                        container.name.trim() || 'Worker',
+                        container.name.trim() || 'Container',
                         container,
                         (nextContainer) =>
                           writeWorkerContainers(
@@ -1302,10 +1421,12 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                             ),
                           ),
                         `worker-${index}`,
-                        () =>
-                          writeWorkerContainers(
-                            workerContainers.filter((_item, itemIndex) => itemIndex !== index),
-                          ),
+                        workerContainers.length > 1
+                          ? () =>
+                              writeWorkerContainers(
+                                workerContainers.filter((_item, itemIndex) => itemIndex !== index),
+                              )
+                          : undefined,
                       )}
                     </React.Fragment>
                   ))}
@@ -1317,9 +1438,9 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                     }
                     style={addLinkStyle}
                   >
-                    Add worker container
+                    Add container
                   </Button>
-                  {renderVolumes('Worker volumes', 'settings-worker-volumes', workerVolumes, (nextVolumes) =>
+                  {renderVolumes('Volumes', 'settings-worker-volumes', workerVolumes, (nextVolumes) =>
                     patchDraft((next) => {
                       const nextSpec = ensureSpec(next);
                       const workerSpec = { ...(asRecord(nextSpec.workerSpec) ?? {}) };

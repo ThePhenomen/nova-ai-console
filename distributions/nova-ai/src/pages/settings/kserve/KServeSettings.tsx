@@ -56,6 +56,7 @@ import {
   duplicateResource,
   isPreInstalled,
   runtimeDisplayName,
+  runtimeEngineTags,
   runtimeVersionTag,
   servingPlatformLabel,
   apiProtocolLabels,
@@ -374,6 +375,7 @@ const KServeSettings: React.FC = () => {
               {displayedItems.map((item) => {
                 const namespace = item.metadata.namespace ?? '';
                 const preInstalled = isPreInstalled(item);
+                const engines = runtimeEngineTags(item);
                 const version = runtimeVersionTag(item);
                 const canMutate = canEditItem(item);
                 const actions = preInstalled
@@ -432,6 +434,13 @@ const KServeSettings: React.FC = () => {
                             <Label isCompact>Pre-installed</Label>
                           </FlexItem>
                         ) : null}
+                        {engines.map((engine) => (
+                          <FlexItem key={`engine-${engine}`}>
+                            <Label color="cyan" isCompact>
+                              {engine}
+                            </Label>
+                          </FlexItem>
+                        ))}
                         {version ? (
                           <FlexItem>
                             <Label color="blue" isCompact>
@@ -491,6 +500,7 @@ const KServeSettings: React.FC = () => {
             <Tbody>
               {displayedItems.map((item) => {
                 const preInstalled = isPreInstalled(item);
+                const engines = runtimeEngineTags(item);
                 const version = runtimeVersionTag(item);
                 const canMutate = canEditItem(item);
                 const actions = preInstalled
@@ -549,6 +559,13 @@ const KServeSettings: React.FC = () => {
                             <Label isCompact>Pre-installed</Label>
                           </FlexItem>
                         ) : null}
+                        {engines.map((engine) => (
+                          <FlexItem key={`engine-${engine}`}>
+                            <Label color="cyan" isCompact>
+                              {engine}
+                            </Label>
+                          </FlexItem>
+                        ))}
                         {version ? (
                           <FlexItem>
                             <Label color="blue" isCompact>
