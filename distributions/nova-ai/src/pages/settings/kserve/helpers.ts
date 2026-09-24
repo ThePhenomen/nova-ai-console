@@ -239,15 +239,26 @@ const writeNumber = (raw: string): number | undefined => {
 };
 
 const writeProbe = (draft: ProbeDraft): Record<string, unknown> | undefined => {
-  if (!draft.enabled && !draft.execCommand.trim()) {
-    return undefined;
-  }
-  const probe: Record<string, unknown> = {};
+  const command = draft.execCommand
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line, index, lines) => line !== '' || (index > 0 && index < lines.length - 1));
   const failureThreshold = writeNumber(draft.failureThreshold);
   const periodSeconds = writeNumber(draft.periodSeconds);
   const successThreshold = writeNumber(draft.successThreshold);
   const timeoutSeconds = writeNumber(draft.timeoutSeconds);
   const initialDelaySeconds = writeNumber(draft.initialDelaySeconds);
+  if (
+    command.length === 0 &&
+    failureThreshold === undefined &&
+    periodSeconds === undefined &&
+    successThreshold === undefined &&
+    timeoutSeconds === undefined &&
+    initialDelaySeconds === undefined
+  ) {
+    return undefined;
+  }
+  const probe: Record<string, unknown> = {};
   if (failureThreshold !== undefined) {
     probe.failureThreshold = failureThreshold;
   }
@@ -263,10 +274,6 @@ const writeProbe = (draft: ProbeDraft): Record<string, unknown> | undefined => {
   if (initialDelaySeconds !== undefined) {
     probe.initialDelaySeconds = initialDelaySeconds;
   }
-  const command = draft.execCommand
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter((line, index, lines) => line !== '' || (index > 0 && index < lines.length - 1));
   if (command.length > 0) {
     probe.exec = { command };
   }

@@ -3,7 +3,6 @@ import {
   Alert,
   Button,
   Checkbox,
-  ExpandableSection,
   Flex,
   FlexItem,
   Form,
@@ -36,7 +35,6 @@ import {
 import {
   asRecord,
   emptyContainer,
-  emptyProbe,
   emptyResource,
   ensureSpec,
   prepareForSave,
@@ -106,7 +104,6 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
     resource ? cloneResource(resource) : emptyResource(kind, defaultNamespace),
   );
   const [mode, setMode] = React.useState<EditorMode>('fields');
-  const [advancedOpen, setAdvancedOpen] = React.useState(false);
   const [manifestText, setManifestText] = React.useState(() =>
     toManifest(
       (resource ? cloneResource(resource) : emptyResource(kind, defaultNamespace)) as Record<
@@ -512,70 +509,61 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
     onChange: (next: ProbeDraft) => void,
     idPrefix: string,
   ) => (
-    <div style={cardStyle}>
-      <Checkbox
-        id={`${idPrefix}-enabled`}
-        label={title}
-        isChecked={probe.enabled}
-        onChange={(_event, checked) => onChange({ ...probe, enabled: checked })}
+    <FormGroup label={title} fieldId={`${idPrefix}-exec`}>
+      <FormHelperText>
+        <HelperText>
+          <HelperTextItem>Optional. Leave empty to omit this probe.</HelperTextItem>
+        </HelperText>
+      </FormHelperText>
+      <Flex spaceItems={{ default: 'spaceItemsMd' }} flexWrap={{ default: 'wrap' }} style={{ marginTop: '0.5rem' }}>
+        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
+          <TextInput
+            id={`${idPrefix}-failure`}
+            value={probe.failureThreshold}
+            onChange={(_event, value) => onChange({ ...probe, enabled: true, failureThreshold: value })}
+            placeholder="Failure threshold"
+            aria-label={`${title} failure threshold`}
+          />
+        </FlexItem>
+        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
+          <TextInput
+            id={`${idPrefix}-period`}
+            value={probe.periodSeconds}
+            onChange={(_event, value) => onChange({ ...probe, enabled: true, periodSeconds: value })}
+            placeholder="Period seconds"
+            aria-label={`${title} period seconds`}
+          />
+        </FlexItem>
+        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
+          <TextInput
+            id={`${idPrefix}-timeout`}
+            value={probe.timeoutSeconds}
+            onChange={(_event, value) => onChange({ ...probe, enabled: true, timeoutSeconds: value })}
+            placeholder="Timeout seconds"
+            aria-label={`${title} timeout seconds`}
+          />
+        </FlexItem>
+        <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
+          <TextInput
+            id={`${idPrefix}-initial`}
+            value={probe.initialDelaySeconds}
+            onChange={(_event, value) => onChange({ ...probe, enabled: true, initialDelaySeconds: value })}
+            placeholder="Initial delay seconds"
+            aria-label={`${title} initial delay`}
+          />
+        </FlexItem>
+      </Flex>
+      <TextArea
+        id={`${idPrefix}-exec`}
+        value={probe.execCommand}
+        onChange={(_event, value) => onChange({ ...probe, enabled: true, execCommand: value })}
+        rows={4}
+        resizeOrientation="vertical"
+        placeholder={'bash\n-c\npython ./health_check.py ...'}
+        aria-label={`${title} exec command`}
+        style={{ marginTop: '0.5rem' }}
       />
-      {probe.enabled ? (
-        <>
-          <Flex spaceItems={{ default: 'spaceItemsMd' }} flexWrap={{ default: 'wrap' }} style={{ marginTop: '0.5rem' }}>
-            <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
-              <TextInput
-                id={`${idPrefix}-failure`}
-                value={probe.failureThreshold}
-                onChange={(_event, value) => onChange({ ...probe, failureThreshold: value })}
-                placeholder="Failure threshold"
-                aria-label="Failure threshold"
-              />
-            </FlexItem>
-            <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
-              <TextInput
-                id={`${idPrefix}-period`}
-                value={probe.periodSeconds}
-                onChange={(_event, value) => onChange({ ...probe, periodSeconds: value })}
-                placeholder="Period seconds"
-                aria-label="Period seconds"
-              />
-            </FlexItem>
-            <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
-              <TextInput
-                id={`${idPrefix}-timeout`}
-                value={probe.timeoutSeconds}
-                onChange={(_event, value) => onChange({ ...probe, timeoutSeconds: value })}
-                placeholder="Timeout seconds"
-                aria-label="Timeout seconds"
-              />
-            </FlexItem>
-            <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '8rem' }}>
-              <TextInput
-                id={`${idPrefix}-initial`}
-                value={probe.initialDelaySeconds}
-                onChange={(_event, value) => onChange({ ...probe, initialDelaySeconds: value })}
-                placeholder="Initial delay seconds"
-                aria-label="Initial delay seconds"
-              />
-            </FlexItem>
-          </Flex>
-          <FormGroup label="Exec command" fieldId={`${idPrefix}-exec`} style={{ marginTop: '0.5rem' }}>
-            <TextArea
-              id={`${idPrefix}-exec`}
-              value={probe.execCommand}
-              onChange={(_event, value) => onChange({ ...probe, execCommand: value })}
-              rows={6}
-              resizeOrientation="vertical"
-            />
-            <FormHelperText>
-              <HelperText>
-                <HelperTextItem>One argv item per line, for example bash then -c then the script.</HelperTextItem>
-              </HelperText>
-            </FormHelperText>
-          </FormGroup>
-        </>
-      ) : null}
-    </div>
+    </FormGroup>
   );
 
   const renderVolumeMounts = (container: ContainerDraft, onChange: (next: ContainerDraft) => void, idPrefix: string) => (
@@ -728,17 +716,6 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
         />
       </FormGroup>
       {renderStringList('Args', `${idPrefix}-args`, container.args, (args) => onChange({ ...container, args }), '--model_name={{.Name}}')}
-      {renderEnv(container, onChange, idPrefix)}
-      {renderResources(container, onChange, idPrefix)}
-    </div>
-  );
-
-  const renderContainerAdvanced = (
-    container: ContainerDraft,
-    onChange: (next: ContainerDraft) => void,
-    idPrefix: string,
-  ) => (
-    <>
       {renderStringList(
         'Command',
         `${idPrefix}-command`,
@@ -747,12 +724,29 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
         'bash',
         true,
       )}
+      {renderEnv(container, onChange, idPrefix)}
+      {renderResources(container, onChange, idPrefix)}
       {renderSecurity(container, onChange, idPrefix)}
       {renderVolumeMounts(container, onChange, idPrefix)}
-      {renderProbe('Liveness probe', container.livenessProbe, (livenessProbe) => onChange({ ...container, livenessProbe }), `${idPrefix}-live`)}
-      {renderProbe('Readiness probe', container.readinessProbe, (readinessProbe) => onChange({ ...container, readinessProbe }), `${idPrefix}-ready`)}
-      {renderProbe('Startup probe', container.startupProbe, (startupProbe) => onChange({ ...container, startupProbe }), `${idPrefix}-start`)}
-    </>
+      {renderProbe(
+        'Liveness probe',
+        container.livenessProbe,
+        (livenessProbe) => onChange({ ...container, livenessProbe }),
+        `${idPrefix}-live`,
+      )}
+      {renderProbe(
+        'Readiness probe',
+        container.readinessProbe,
+        (readinessProbe) => onChange({ ...container, readinessProbe }),
+        `${idPrefix}-ready`,
+      )}
+      {renderProbe(
+        'Startup probe',
+        container.startupProbe,
+        (startupProbe) => onChange({ ...container, startupProbe }),
+        `${idPrefix}-start`,
+      )}
+    </div>
   );
 
   const renderLabels = () => (
@@ -1123,170 +1117,128 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
                   >
                     Add container
                   </Button>
+                  {renderVolumes('Volumes', 'settings-volumes', volumes, (nextVolumes) =>
+                    patchDraft((next) => {
+                      const nextSpec = ensureSpec(next);
+                      const written = writeVolumes(nextVolumes);
+                      if (written) {
+                        nextSpec.volumes = written;
+                      } else {
+                        delete nextSpec.volumes;
+                      }
+                    }),
+                  )}
+                  <FormGroup label="Worker spec" fieldId="settings-worker">
+                    <FormHelperText>
+                      <HelperText>
+                        <HelperTextItem>
+                          Optional multi-node worker. Pipeline and tensor parallel sizes are integers starting at 1.
+                          Worker containers use the same fields as the main containers, including probes.
+                        </HelperTextItem>
+                      </HelperText>
+                    </FormHelperText>
+                    <Flex spaceItems={{ default: 'spaceItemsMd' }} flexWrap={{ default: 'wrap' }} style={{ marginTop: '0.5rem' }}>
+                      <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
+                        <TextInput
+                          id="settings-pipeline-parallel"
+                          type="text"
+                          inputMode="numeric"
+                          value={workerParallel(draft, 'pipelineParallelSize')}
+                          onChange={(_event, value) =>
+                            patchDraft((next) => writeWorkerParallel(next, 'pipelineParallelSize', value))
+                          }
+                          placeholder="Pipeline parallel size"
+                          aria-label="Pipeline parallel size"
+                        />
+                      </FlexItem>
+                      <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
+                        <TextInput
+                          id="settings-tensor-parallel"
+                          type="text"
+                          inputMode="numeric"
+                          value={workerParallel(draft, 'tensorParallelSize')}
+                          onChange={(_event, value) =>
+                            patchDraft((next) => writeWorkerParallel(next, 'tensorParallelSize', value))
+                          }
+                          placeholder="Tensor parallel size"
+                          aria-label="Tensor parallel size"
+                        />
+                      </FlexItem>
+                    </Flex>
+                  </FormGroup>
+                  {workerContainers.map((container, index) => (
+                    <React.Fragment key={`worker-${index}`}>
+                      {renderContainerBasics(
+                        `Worker container ${index + 1}`,
+                        container,
+                        (nextContainer) =>
+                          writeWorkerContainers(
+                            workerContainers.map((item, itemIndex) =>
+                              itemIndex === index ? nextContainer : item,
+                            ),
+                          ),
+                        `worker-${index}`,
+                        () =>
+                          writeWorkerContainers(
+                            workerContainers.filter((_item, itemIndex) => itemIndex !== index),
+                          ),
+                      )}
+                    </React.Fragment>
+                  ))}
+                  <Button
+                    variant="link"
+                    icon={<PlusCircleIcon />}
+                    onClick={() =>
+                      writeWorkerContainers([...workerContainers, emptyContainer('worker-container')])
+                    }
+                    style={addLinkStyle}
+                  >
+                    Add worker container
+                  </Button>
+                  {renderVolumes('Worker volumes', 'settings-worker-volumes', workerVolumes, (nextVolumes) =>
+                    patchDraft((next) => {
+                      const nextSpec = ensureSpec(next);
+                      const workerSpec = { ...(asRecord(nextSpec.workerSpec) ?? {}) };
+                      const written = writeVolumes(nextVolumes);
+                      if (written) {
+                        workerSpec.volumes = written;
+                      } else {
+                        delete workerSpec.volumes;
+                      }
+                      if (Object.keys(workerSpec).length === 0) {
+                        delete nextSpec.workerSpec;
+                      } else {
+                        nextSpec.workerSpec = workerSpec;
+                      }
+                    }),
+                  )}
                 </>
               ) : null}
-              <div style={{ marginTop: '1rem' }}>
-                <ExpandableSection
-                  toggleText="Advanced"
-                  isExpanded={advancedOpen}
-                  onToggle={(_event, expanded) => setAdvancedOpen(expanded)}
-                >
-                  {isStorage ? (
-                    <>
-                      <Switch
-                        id="settings-disabled"
-                        label="Disabled"
-                        isChecked={draft.disabled === true}
-                        onChange={(_event, checked) =>
-                          patchDraft((next) => {
-                            if (checked) {
-                              next.disabled = true;
-                            } else {
-                              delete next.disabled;
-                            }
-                          })
+              <FormGroup fieldId="settings-disabled" style={{ marginTop: '1rem' }}>
+                <Switch
+                  id="settings-disabled"
+                  label="Disabled"
+                  isChecked={isStorage ? draft.disabled === true : spec.disabled === true}
+                  onChange={(_event, checked) =>
+                    patchDraft((next) => {
+                      if (isStorage) {
+                        if (checked) {
+                          next.disabled = true;
+                        } else {
+                          delete next.disabled;
                         }
-                      />
-                      {renderContainerAdvanced(storageContainer, writeStorageContainer, 'storage-advanced')}
-                    </>
-                  ) : (
-                    <>
-                      <Switch
-                        id="settings-disabled"
-                        label="Disabled"
-                        isChecked={spec.disabled === true}
-                        onChange={(_event, checked) =>
-                          patchDraft((next) => {
-                            const nextSpec = ensureSpec(next);
-                            if (checked) {
-                              nextSpec.disabled = true;
-                            } else {
-                              delete nextSpec.disabled;
-                            }
-                          })
-                        }
-                      />
-                      {runtimeContainers.map((container, index) => (
-                        <div key={`runtime-advanced-${index}`} style={{ marginTop: '0.75rem' }}>
-                          <strong>{container.name || `Container ${index + 1}`} advanced</strong>
-                          {renderContainerAdvanced(
-                            container,
-                            (nextContainer) =>
-                              writeRuntimeContainers(
-                                runtimeContainers.map((item, itemIndex) =>
-                                  itemIndex === index ? nextContainer : item,
-                                ),
-                              ),
-                            `runtime-advanced-${index}`,
-                          )}
-                        </div>
-                      ))}
-                      {renderVolumes('Volumes', 'settings-volumes', volumes, (nextVolumes) =>
-                        patchDraft((next) => {
-                          const nextSpec = ensureSpec(next);
-                          const written = writeVolumes(nextVolumes);
-                          if (written) {
-                            nextSpec.volumes = written;
-                          } else {
-                            delete nextSpec.volumes;
-                          }
-                        }),
-                      )}
-                      <FormGroup label="Worker spec" fieldId="settings-worker">
-                        <FormHelperText>
-                          <HelperText>
-                            <HelperTextItem>
-                              Pipeline and tensor parallel sizes are integers starting at 1. Worker containers,
-                              volumes and probes belong here for multi-node runtimes.
-                            </HelperTextItem>
-                          </HelperText>
-                        </FormHelperText>
-                        <Flex spaceItems={{ default: 'spaceItemsMd' }} flexWrap={{ default: 'wrap' }} style={{ marginTop: '0.5rem' }}>
-                          <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
-                            <TextInput
-                              id="settings-pipeline-parallel"
-                              type="text"
-                              inputMode="numeric"
-                              value={workerParallel(draft, 'pipelineParallelSize')}
-                              onChange={(_event, value) =>
-                                patchDraft((next) => writeWorkerParallel(next, 'pipelineParallelSize', value))
-                              }
-                              placeholder="Pipeline parallel size"
-                              aria-label="Pipeline parallel size"
-                            />
-                          </FlexItem>
-                          <FlexItem grow={{ default: 'grow' }} style={{ minWidth: '10rem' }}>
-                            <TextInput
-                              id="settings-tensor-parallel"
-                              type="text"
-                              inputMode="numeric"
-                              value={workerParallel(draft, 'tensorParallelSize')}
-                              onChange={(_event, value) =>
-                                patchDraft((next) => writeWorkerParallel(next, 'tensorParallelSize', value))
-                              }
-                              placeholder="Tensor parallel size"
-                              aria-label="Tensor parallel size"
-                            />
-                          </FlexItem>
-                        </Flex>
-                      </FormGroup>
-                      {workerContainers.map((container, index) => (
-                        <React.Fragment key={`worker-${index}`}>
-                          {renderContainerBasics(
-                            `Worker container ${index + 1}`,
-                            container,
-                            (nextContainer) =>
-                              writeWorkerContainers(
-                                workerContainers.map((item, itemIndex) =>
-                                  itemIndex === index ? nextContainer : item,
-                                ),
-                              ),
-                            `worker-${index}`,
-                            () => writeWorkerContainers(workerContainers.filter((_item, itemIndex) => itemIndex !== index)),
-                          )}
-                          {renderContainerAdvanced(
-                            container,
-                            (nextContainer) =>
-                              writeWorkerContainers(
-                                workerContainers.map((item, itemIndex) =>
-                                  itemIndex === index ? nextContainer : item,
-                                ),
-                              ),
-                            `worker-advanced-${index}`,
-                          )}
-                        </React.Fragment>
-                      ))}
-                      <Button
-                        variant="link"
-                        icon={<PlusCircleIcon />}
-                        onClick={() =>
-                          writeWorkerContainers([...workerContainers, emptyContainer('worker-container')])
-                        }
-                        style={addLinkStyle}
-                      >
-                        Add worker container
-                      </Button>
-                      {renderVolumes('Worker volumes', 'settings-worker-volumes', workerVolumes, (nextVolumes) =>
-                        patchDraft((next) => {
-                          const nextSpec = ensureSpec(next);
-                          const workerSpec = { ...(asRecord(nextSpec.workerSpec) ?? {}) };
-                          const written = writeVolumes(nextVolumes);
-                          if (written) {
-                            workerSpec.volumes = written;
-                          } else {
-                            delete workerSpec.volumes;
-                          }
-                          if (Object.keys(workerSpec).length === 0) {
-                            delete nextSpec.workerSpec;
-                          } else {
-                            nextSpec.workerSpec = workerSpec;
-                          }
-                        }),
-                      )}
-                    </>
-                  )}
-                </ExpandableSection>
-              </div>
+                        return;
+                      }
+                      const nextSpec = ensureSpec(next);
+                      if (checked) {
+                        nextSpec.disabled = true;
+                      } else {
+                        delete nextSpec.disabled;
+                      }
+                    })
+                  }
+                />
+              </FormGroup>
             </>
           ) : (
             <FormGroup label="YAML" isRequired fieldId="settings-manifest">
