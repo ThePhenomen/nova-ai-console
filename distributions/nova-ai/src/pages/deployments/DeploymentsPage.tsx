@@ -24,7 +24,16 @@ import {
   ToolbarItem,
 } from '@patternfly/react-core';
 import { CubesIcon, FolderIcon } from '@patternfly/react-icons';
-import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
+import {
+  ActionsColumn,
+  Table,
+  Tbody,
+  Td,
+  Th,
+  Thead,
+  Tr,
+  type ThProps,
+} from '@patternfly/react-table';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { hasProjectService } from '../../auth/access';
 import { usePlatformAccess } from '../../auth/usePlatformAccess';
@@ -65,6 +74,26 @@ const formatCreated = (value?: string): string => {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 };
 
+type SortColumn = 'name' | 'kind' | 'created';
+
+const SORT_COLUMNS: SortColumn[] = ['name', 'kind', 'created'];
+
+const compareDeployments = (
+  left: KServeResource,
+  right: KServeResource,
+  column: SortColumn,
+  direction: 'asc' | 'desc',
+): number => {
+  const order = direction === 'asc' ? 1 : -1;
+  if (column === 'kind') {
+    return catalogOf(left).title.localeCompare(catalogOf(right).title) * order;
+  }
+  if (column === 'created') {
+    return (left.metadata.creationTimestamp ?? '').localeCompare(right.metadata.creationTimestamp ?? '') * order;
+  }
+  return left.metadata.name.localeCompare(right.metadata.name) * order;
+};
+
 const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
   const { access } = usePlatformAccess();
   const navigate = useNavigate();
@@ -78,6 +107,8 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
   const [editTarget, setEditTarget] = React.useState<KServeResource | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<KServeResource | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [sortColumn, setSortColumn] = React.useState<SortColumn>('name');
+  const [sortDirection, setSortDirection] = React.useState<'asc' | 'desc'>('asc');
 
   const load = React.useCallback(async () => {
     setIsLoading(true);
@@ -108,9 +139,7 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
           }),
         ),
       );
-      setItems(
-        lists.flat().toSorted((left, right) => left.metadata.name.localeCompare(right.metadata.name)),
-      );
+      setItems(lists.flat());
     } catch (err) {
       setError(err instanceof K8sApiError ? err.message : 'Failed to load deployments.');
       setItems([]);
@@ -127,9 +156,24 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
   const selectedProject =
     projectName ||
     (requestedProject && namespaces.includes(requestedProject) ? requestedProject : '');
-  const displayedItems = selectedProject
-    ? items.filter((item) => item.metadata.namespace === selectedProject)
-    : items;
+  const displayedItems = React.useMemo(() => {
+    const scoped = selectedProject
+      ? items.filter((item) => item.metadata.namespace === selectedProject)
+      : items;
+    return scoped.toSorted((left, right) => compareDeployments(left, right, sortColumn, sortDirection));
+  }, [items, selectedProject, sortColumn, sortDirection]);
+
+  const getSortParams = (column: SortColumn): ThProps['sort'] => ({
+    sortBy: {
+      index: SORT_COLUMNS.indexOf(sortColumn),
+      direction: sortDirection,
+    },
+    onSort: (_event, index, direction) => {
+      setSortColumn(SORT_COLUMNS[index] ?? 'name');
+      setSortDirection(direction);
+    },
+    columnIndex: SORT_COLUMNS.indexOf(column),
+  });
   const showProjectColumn = !selectedProject;
   const createNamespaces = namespaces.filter((namespace) => access.forProject(namespace).canEdit);
   const canCreate = selectedProject
@@ -300,13 +344,13 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
         <Table aria-label="Deployments" variant="compact">
           <Thead>
             <Tr>
-              <Th>Name</Th>
-              <Th>Kind</Th>
+              <Th sort={getSortParams('name')}>Name</Th>
+              <Th sort={getSortParams('kind')}>Kind</Th>
               {showProjectColumn ? <Th>Project</Th> : null}
               <Th>Model format</Th>
               <Th>Ready</Th>
               <Th>URL</Th>
-              <Th>Created</Th>
+              <Th sort={getSortParams('created')}>Created</Th>
               <Th screenReaderText="Actions" />
             </Tr>
           </Thead>

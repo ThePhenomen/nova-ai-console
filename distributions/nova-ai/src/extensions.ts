@@ -2,6 +2,7 @@ import type { Extension } from '@nova-ai/plugin-core';
 import type {
   HrefNavItemExtension,
   MastheadToolbarItemExtension,
+  NavSectionExtension,
   RouteExtension,
 } from '@nova-ai/plugin-core/extension-points';
 
@@ -86,6 +87,32 @@ const extensions: Extension[] = [
     },
     flags: {
       required: ['deployments'],
+    },
+  } satisfies RouteExtension,
+  {
+    type: 'app.navigation/section',
+    properties: {
+      id: 'settings',
+      title: 'Settings',
+      group: '9_settings',
+    },
+  } satisfies NavSectionExtension,
+  {
+    type: 'app.navigation/href',
+    properties: {
+      id: 'settings-kserve',
+      title: 'KServe',
+      href: '/settings/kserve',
+      path: '/settings/*',
+      section: 'settings',
+      group: '9_settings',
+    },
+  } satisfies HrefNavItemExtension,
+  {
+    type: 'app.route',
+    properties: {
+      path: '/settings/*',
+      component: () => import('./pages/settings/Settings'),
     },
   } satisfies RouteExtension,
   {

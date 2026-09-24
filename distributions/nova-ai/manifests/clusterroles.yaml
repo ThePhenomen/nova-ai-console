@@ -107,7 +107,10 @@ rules:
       - platformroles/status
       - platformrolebindings/status
     verbs: ["*"]
-  # LocalModelCache is cluster-scoped in crds.yaml.
+  # Cluster-scoped KServe config. Developers only get list/watch on these.
   - apiGroups: ["serving.kserve.io"]
-    resources: ["localmodelcaches"]
+    resources:
+      - clusterservingruntimes
+      - clusterstoragecontainers
+      - localmodelcaches
     verbs: ["*"]

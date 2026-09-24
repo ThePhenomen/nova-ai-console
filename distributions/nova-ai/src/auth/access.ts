@@ -320,6 +320,7 @@ export const bootstrapAccess = (username?: string): PlatformAccess => {
     canCreateProjects: true,
     username,
     services,
+    visibleProjects: [],
     forProject: () => project,
     canViewProject: () => true,
   };
@@ -331,6 +332,7 @@ export const emptyAccess = (source: PlatformAccess['source'], username?: string)
   canCreateProjects: false,
   username,
   services: [],
+  visibleProjects: [],
   forProject: () => emptyProjectAccess(),
   canViewProject: () => false,
 });
@@ -403,6 +405,7 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
     canCreateProjects: consoleRole === 'admin',
     username: input.user.username,
     services: grantedServices,
+    visibleProjects: [...visibleProjects].toSorted(),
     forProject: (projectName: string) => {
       const role = maxRole(
         seesAllProjects ? consoleRole : 'none',

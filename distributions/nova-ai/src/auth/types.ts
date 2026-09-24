@@ -126,6 +126,7 @@ export type PlatformAccess = {
   canCreateProjects: boolean;
   username?: string;
   services: string[];
+  visibleProjects: string[];
   forProject: (projectName: string) => ProjectAccess;
   canViewProject: (projectName: string) => boolean;
 };
