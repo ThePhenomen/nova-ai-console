@@ -183,7 +183,7 @@ const writeEnv = (rows: EnvDraft[], strict = false): unknown[] | undefined => {
       }
       return { name, value: row.value };
     })
-    .filter((item): item is Record<string, unknown> => item !== null);
+    .filter((item) => item !== null);
   return items.length > 0 ? items : undefined;
 };
 
@@ -678,7 +678,10 @@ export const runtimeDisplayName = (resource: KServeSettingsResource): string =>
 export const runtimeVersionTag = (resource: KServeSettingsResource): string | undefined => {
   const labels = resource.metadata.labels ?? {};
   const versions = Object.entries(labels)
-    .filter(([key, value]) => key.endsWith('.version') && value.trim() !== '')
+    .filter((entry): entry is [string, string] => {
+      const [key, value] = entry;
+      return key.endsWith('.version') && typeof value === 'string' && value.trim() !== '';
+    })
     .toSorted(([left], [right]) => left.localeCompare(right));
   const value = versions[0]?.[1]?.trim();
   if (!value) {

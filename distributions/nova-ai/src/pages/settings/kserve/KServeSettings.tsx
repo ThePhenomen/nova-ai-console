@@ -457,7 +457,7 @@ const KServeSettings: React.FC = () => {
                       <Flex spaceItems={{ default: 'spaceItemsSm' }}>
                         {apiProtocolLabels(item).map((protocol) => (
                           <FlexItem key={protocol}>
-                            <Label color="gold" isCompact>
+                            <Label color="yellow" isCompact>
                               {protocol}
                             </Label>
                           </FlexItem>

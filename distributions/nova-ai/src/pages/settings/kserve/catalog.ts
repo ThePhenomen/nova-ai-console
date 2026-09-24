@@ -1,4 +1,4 @@
-import type { K8sObjectMeta } from '../../cluster/types';
+import type { K8sObjectMeta } from '../../../cluster/types';
 
 export type KServeSettingsKind = 'ClusterServingRuntime' | 'ClusterStorageContainer' | 'ServingRuntime';
 

@@ -69,7 +69,7 @@ const ResourceDetails: React.FC = () => {
 
   const listPath = settingsListPath(kind);
   const canEdit =
-    Boolean(item) &&
+    item !== null &&
     !isPreInstalled(item) &&
     canEditSettingsKind(kind.kind, access.consoleRole) &&
     (kind.scope === 'Cluster' || access.forProject(namespace ?? '').canEdit);
