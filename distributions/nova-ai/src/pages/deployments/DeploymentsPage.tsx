@@ -3,10 +3,15 @@ import {
   Alert,
   Bullseye,
   Button,
+  Content,
   EmptyState,
   EmptyStateActions,
   EmptyStateBody,
   EmptyStateFooter,
+  Flex,
+  FlexItem,
+  FormSelect,
+  FormSelectOption,
   Label,
   Modal,
   ModalBody,
@@ -18,9 +23,9 @@ import {
   ToolbarContent,
   ToolbarItem,
 } from '@patternfly/react-core';
-import { CubesIcon } from '@patternfly/react-icons';
+import { CubesIcon, FolderIcon } from '@patternfly/react-icons';
 import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { hasProjectService } from '../../auth/access';
 import { usePlatformAccess } from '../../auth/usePlatformAccess';
 import { K8sApiError } from '../../cluster/k8sClient';
@@ -63,6 +68,7 @@ const formatCreated = (value?: string): string => {
 const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
   const { access } = usePlatformAccess();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = React.useState<KServeResource[]>([]);
   const [namespaces, setNamespaces] = React.useState<string[]>(projectName ? [projectName] : []);
   const [error, setError] = React.useState<string | null>(null);
@@ -117,9 +123,19 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
     void load();
   }, [load]);
 
+  const requestedProject = searchParams.get('project') ?? '';
+  const selectedProject =
+    projectName ||
+    (requestedProject && namespaces.includes(requestedProject) ? requestedProject : '');
+  const displayedItems = selectedProject
+    ? items.filter((item) => item.metadata.namespace === selectedProject)
+    : items;
+  const showProjectColumn = !selectedProject;
   const createNamespaces = namespaces.filter((namespace) => access.forProject(namespace).canEdit);
-  const canCreate = createNamespaces.length > 0;
-  const defaultCreateNamespace = projectName ?? createNamespaces[0] ?? '';
+  const canCreate = selectedProject
+    ? access.forProject(selectedProject).canEdit
+    : createNamespaces.length > 0;
+  const defaultCreateNamespace = selectedProject || createNamespaces[0] || '';
   const openDetails = (item: KServeResource) => {
     const namespace = item.metadata.namespace ?? '';
     navigate(
@@ -152,6 +168,60 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
 
   return (
     <PageSection>
+      {!projectName ? (
+        <>
+          <Content component="p" style={{ marginBottom: '0.75rem' }}>
+            View and manage the health and performance of deployed models.
+          </Content>
+          <Flex
+            alignItems={{ default: 'alignItemsCenter' }}
+            spaceItems={{ default: 'spaceItemsMd' }}
+            flexWrap={{ default: 'wrap' }}
+            style={{ marginBottom: '1rem' }}
+          >
+            <FlexItem>
+              <span style={{ fontWeight: 600 }}>Project</span>
+            </FlexItem>
+            <FlexItem>
+              <FormSelect
+                id="deployments-project-filter"
+                value={selectedProject}
+                onChange={(_event, value) => {
+                  if (value) {
+                    setSearchParams({ project: value });
+                    return;
+                  }
+                  setSearchParams({});
+                }}
+                aria-label="Project"
+                style={{ width: '14rem' }}
+              >
+                <FormSelectOption value="" label="All projects" />
+                {namespaces.map((namespace) => (
+                  <FormSelectOption key={namespace} value={namespace} label={namespace} />
+                ))}
+              </FormSelect>
+            </FlexItem>
+            {selectedProject ? (
+              <FlexItem>
+                <span>Go to </span>
+                <Link
+                  to={`/projects/${encodeURIComponent(selectedProject)}/overview`}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  <FolderIcon />
+                  {selectedProject}
+                </Link>
+              </FlexItem>
+            ) : null}
+          </Flex>
+        </>
+      ) : null}
       {error ? (
         <Alert variant="danger" isInline title="Could not load deployments" style={{ marginBottom: '1rem' }}>
           {error}
@@ -198,11 +268,12 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
           <Spinner />
         </Bullseye>
       ) : null}
-      {!isLoading && items.length === 0 && !error ? (
+      {!isLoading && displayedItems.length === 0 && !error ? (
         <EmptyState headingLevel="h2" titleText="No deployments" icon={CubesIcon}>
           <EmptyStateBody>
-            Create an InferenceService or InferenceGraph from a short form, or paste a YAML
-            manifest.
+            {selectedProject
+              ? `No InferenceService or InferenceGraph resources in ${selectedProject}.`
+              : 'Create an InferenceService or InferenceGraph from a short form, or paste a YAML manifest.'}
           </EmptyStateBody>
           {canCreate ? (
             <EmptyStateFooter>
@@ -222,13 +293,13 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
           ) : null}
         </EmptyState>
       ) : null}
-      {!isLoading && items.length > 0 ? (
+      {!isLoading && displayedItems.length > 0 ? (
         <Table aria-label="Deployments" variant="compact">
           <Thead>
             <Tr>
               <Th>Name</Th>
               <Th>Kind</Th>
-              {!projectName ? <Th>Project</Th> : null}
+              {showProjectColumn ? <Th>Project</Th> : null}
               <Th>Model format</Th>
               <Th>Ready</Th>
               <Th>URL</Th>
@@ -237,7 +308,7 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
             </Tr>
           </Thead>
           <Tbody>
-            {items.map((item) => {
+            {displayedItems.map((item) => {
               const kind = catalogOf(item);
               const namespace = item.metadata.namespace ?? '';
               const ready = readyStatus(item);
@@ -250,7 +321,7 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
                 >
                   <Td dataLabel="Name">{item.metadata.name}</Td>
                   <Td dataLabel="Kind">{kind.title}</Td>
-                  {!projectName ? <Td dataLabel="Project">{namespace || '—'}</Td> : null}
+                  {showProjectColumn ? <Td dataLabel="Project">{namespace || '—'}</Td> : null}
                   <Td dataLabel="Model format">
                     {kind.kind === 'InferenceService' ? predictorType(item) : '—'}
                   </Td>
@@ -313,7 +384,7 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
         <ResourceFormModal
           kind={kindByName('InferenceService')}
           namespace={defaultCreateNamespace}
-          namespaces={createNamespaces}
+          namespaces={selectedProject ? [selectedProject] : createNamespaces}
           allowKindSwitch
           onClose={() => setIsCreateOpen(false)}
           onSaved={() => {
