@@ -348,7 +348,7 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
               <Th sort={getSortParams('kind')}>Kind</Th>
               {showProjectColumn ? <Th>Project</Th> : null}
               <Th>Model format</Th>
-              <Th>Ready</Th>
+              <Th>Status</Th>
               <Th>URL</Th>
               <Th sort={getSortParams('created')}>Created</Th>
               <Th screenReaderText="Actions" />
@@ -372,7 +372,7 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
                   <Td dataLabel="Model format">
                     {kind.kind === 'InferenceService' ? predictorType(item) : '—'}
                   </Td>
-                  <Td dataLabel="Ready">
+                  <Td dataLabel="Status">
                     <Label color={readyColor(ready)} isCompact>
                       {ready === 'True' ? 'Ready' : ready === 'False' ? 'Not ready' : 'Unknown'}
                     </Label>

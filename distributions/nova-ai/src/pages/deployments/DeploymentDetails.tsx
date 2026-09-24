@@ -176,7 +176,7 @@ const DeploymentDetails: React.FC<DeploymentDetailsProps> = ({ projectScoped = f
                 </DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
-                <DescriptionListTerm>Ready</DescriptionListTerm>
+                <DescriptionListTerm>Status</DescriptionListTerm>
                 <DescriptionListDescription>
                   <Label color={readyStatus(item) === 'True' ? 'green' : readyStatus(item) === 'False' ? 'red' : 'grey'} isCompact>
                     {readyStatus(item) === 'True' ? 'Ready' : readyStatus(item) === 'False' ? 'Not ready' : 'Unknown'}
