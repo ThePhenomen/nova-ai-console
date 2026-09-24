@@ -134,7 +134,9 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
   const createNamespaces = namespaces.filter((namespace) => access.forProject(namespace).canEdit);
   const canCreate = selectedProject
     ? access.forProject(selectedProject).canEdit
-    : createNamespaces.length > 0;
+    : access.consoleRole === 'admin' ||
+      access.consoleRole === 'contributor' ||
+      createNamespaces.length > 0;
   const defaultCreateNamespace = selectedProject || createNamespaces[0] || '';
   const openDetails = (item: KServeResource) => {
     const namespace = item.metadata.namespace ?? '';
@@ -239,6 +241,7 @@ const DeploymentsPage: React.FC<DeploymentsPageProps> = ({ projectName }) => {
               <Button
                 variant="primary"
                 onClick={() => setIsCreateOpen(true)}
+                isDisabled={!defaultCreateNamespace}
                 style={{
                   backgroundColor: 'var(--pf-t--global--color--brand--default, #0066cc)',
                   color: 'var(--pf-t--global--text--color--on-brand, #fff)',
