@@ -136,7 +136,7 @@ const ResourceDetails: React.FC = () => {
             ) : null}
             {engines.map((engine) => (
               <FlexItem key={`engine-${engine}`}>
-                <Label color="cyan" isCompact>
+                <Label color="teal" isCompact>
                   {engine}
                 </Label>
               </FlexItem>

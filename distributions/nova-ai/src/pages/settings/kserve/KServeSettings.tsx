@@ -436,7 +436,7 @@ const KServeSettings: React.FC = () => {
                         ) : null}
                         {engines.map((engine) => (
                           <FlexItem key={`engine-${engine}`}>
-                            <Label color="cyan" isCompact>
+                            <Label color="teal" isCompact>
                               {engine}
                             </Label>
                           </FlexItem>
@@ -561,7 +561,7 @@ const KServeSettings: React.FC = () => {
                         ) : null}
                         {engines.map((engine) => (
                           <FlexItem key={`engine-${engine}`}>
-                            <Label color="cyan" isCompact>
+                            <Label color="teal" isCompact>
                               {engine}
                             </Label>
                           </FlexItem>
