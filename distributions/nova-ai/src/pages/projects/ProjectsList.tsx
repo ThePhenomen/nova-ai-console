@@ -140,7 +140,6 @@ const ProjectsList: React.FC = () => {
   }, [loadProjects]);
 
   const showCreate = access.canCreateProjects;
-  const canManageRbac = access.consoleRole === 'admin';
 
   const filteredProjects = React.useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -222,10 +221,9 @@ const ProjectsList: React.FC = () => {
 
   return (
     <PageSection>
-      {access.source === 'bootstrap' ? (
-        <Alert variant="info" isInline title="Using kubeconfig credentials" style={{ marginBottom: '1rem' }}>
-          Sign in with StarVault to apply PlatformRoleBindings. Until then the console treats this
-          connection as cluster admin.
+      {!session ? (
+        <Alert variant="info" isInline title="Sign in required" style={{ marginBottom: '1rem' }}>
+          Cluster requests run as the signed-in user. Sign in with StarVault before loading projects.
         </Alert>
       ) : null}
       {session && access.source === 'oidc' && access.consoleRole === 'none' && filteredProjects.length === 0 ? (
@@ -349,7 +347,7 @@ const ProjectsList: React.FC = () => {
                     onMouseDown={(event) => event.stopPropagation()}
                     onKeyDown={(event) => event.stopPropagation()}
                   >
-                    {showCreate || canManageRbac ? (
+                    {showCreate || access.forProject(project.name).canManageRbac ? (
                       <ActionsColumn
                         items={[
                           {
@@ -363,7 +361,7 @@ const ProjectsList: React.FC = () => {
                           },
                           {
                             title: 'Edit permissions',
-                            isDisabled: !canManageRbac,
+                            isDisabled: !access.forProject(project.name).canManageRbac,
                             onClick: (event) => {
                               event?.preventDefault();
                               event?.stopPropagation();

@@ -1,13 +1,28 @@
-# WHERE lives on PlatformRoleBinding, not on PlatformRole or User.
-# target: Cluster → console lists every nova-ai-console project (admin).
-# target: Namespaces → only the listed projects (developer).
-# Sidebar and project extras (Workbench, Experiments, Deployments) come from
-# nova-ai.io/<tab>-enabled: "true" on the bound PlatformRole.
+# Console and Deployments follow ClusterRole rules, limited by kubernetes.target.
+# target: Cluster on nova-ai-admin lists every project and allows creating projects.
+# target: Namespaces on nova-ai-kserve-* opens Deployments in ml-team.
+# Login still needs a binding to nova-ai-admin or nova-ai-developer, because
+# those roles carry the nova-ai-console OIDC application.
 ---
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRoleBinding
 metadata:
-  name: nova-ai-developer-ml-team
+  name: nova-ai-console-ml-team-admins
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-admin
+  subjects:
+    - kind: Group
+      name: nova-ai-console.ml-team.admins
+  kubernetes:
+    target: Cluster
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-console-ml-team-developers
   labels:
     nova-ai.io/console: nova-ai-console
 spec:
@@ -15,7 +30,58 @@ spec:
     name: nova-ai-developer
   subjects:
     - kind: Group
-      name: REPLACE_WITH_GROUP_CR_NAME
+      name: nova-ai-console.ml-team.developers
+  kubernetes:
+    target: Namespaces
+    namespaces:
+      - ml-team
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-kserve-ml-team-admins
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-kserve-admin
+  subjects:
+    - kind: Group
+      name: nova-ai-kserve.ml-team.admins
+  kubernetes:
+    target: Namespaces
+    namespaces:
+      - ml-team
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-kserve-ml-team-developers
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-kserve-developer
+  subjects:
+    - kind: Group
+      name: nova-ai-kserve.ml-team.developers
+  kubernetes:
+    target: Namespaces
+    namespaces:
+      - ml-team
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-kserve-ml-team-viewers
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-kserve-viewer
+  subjects:
+    - kind: Group
+      name: nova-ai-kserve.ml-team.viewers
   kubernetes:
     target: Namespaces
     namespaces:

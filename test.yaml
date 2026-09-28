@@ -20,8 +20,8 @@ spec:
     applications:
       - nova-ai-console
 ---
-# Contributor role. Kubernetes rights still come from aggregation.
-# No namespace create and no platformroles write, so the console stays a contributor.
+# Contributor role. No console-persona label → normal UI (no Create project,
+# no Roles/Permissions). Kubernetes rights still come from aggregation.
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRole
 metadata:
@@ -74,38 +74,38 @@ spec:
           nova-ai.io/aggregate-to-kserve-viewer: "true"
 ---
 # One OIDC client per component instance. Level groups bind to this role:
-# nova-ai-mlflow.team-a.admins, nova-ai-mlflow.team-a.developers, nova-ai-mlflow.team-a.viewers.
+# nova-ai-mlflow.ml-team.admins, nova-ai-mlflow.ml-team.developers, nova-ai-mlflow.ml-team.viewers.
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRole
 metadata:
-  name: nova-ai-mlflow.team-a
+  name: nova-ai-mlflow.ml-team
   labels:
     nova-ai.io/console: nova-ai-console
 spec:
   oidc:
     applications:
-      - nova-ai-mlflow-team-a
+      - nova-ai-console
 ---
-# nova-ai-airflow.team-a.admins, nova-ai-airflow.team-a.developers, nova-ai-airflow.team-a.viewers.
+# nova-ai-airflow.ml-team.admins, nova-ai-airflow.ml-team.developers, nova-ai-airflow.ml-team.viewers.
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRole
 metadata:
-  name: nova-ai-airflow.team-a
+  name: nova-ai-airflow.ml-team
   labels:
     nova-ai.io/console: nova-ai-console
 spec:
   oidc:
     applications:
-      - nova-ai-airflow-team-a
+      - nova-ai-console
 ---
-# nova-ai-jupyterhub.team-a.admins, nova-ai-jupyterhub.team-a.developers. No viewers group.
+# nova-ai-jupyterhub.ml-team.admins, nova-ai-jupyterhub.ml-team.developers. No viewers group.
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRole
 metadata:
-  name: nova-ai-jupyterhub.team-a
+  name: nova-ai-jupyterhub.ml-team
   labels:
     nova-ai.io/console: nova-ai-console
 spec:
   oidc:
     applications:
-      - nova-ai-jupyterhub-team-a
+      - nova-ai-console

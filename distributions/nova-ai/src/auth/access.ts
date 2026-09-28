@@ -404,12 +404,13 @@ const projectAccessFrom = (
   role: ConsoleRole,
   services: string[],
   canEditDeployments = false,
+  canManageRbac = role === 'admin',
 ): ProjectAccess => ({
   role,
   canView: role !== 'none' || services.length > 0,
   canEdit: role === 'contributor' || role === 'admin',
   canEditDeployments,
-  canManageRbac: role === 'admin',
+  canManageRbac,
   services: unique(services),
 });
 
@@ -457,6 +458,8 @@ const KSERVE_CLUSTER_RESOURCES = new Set([
 ]);
 const READ_VERBS = new Set(['*', 'get', 'list', 'watch']);
 const WRITE_VERBS = new Set(['*', 'create', 'update', 'patch', 'delete']);
+const CONSOLE_AUTH_API_GROUP = 'auth.nova-platform.io';
+const CONSOLE_RBAC_RESOURCES = ['platformroles', 'platformrolebindings'];
 
 type KserveGrant = { read: boolean; writeNamespaced: boolean; writeCluster: boolean };
 
@@ -518,13 +521,76 @@ const kserveGrantForRole = (
   }, emptyKserveGrant());
 };
 
+type ConsoleGrant = {
+  listNamespaces: boolean;
+  createNamespaces: boolean;
+  manageRbac: boolean;
+};
+
+const emptyConsoleGrant = (): ConsoleGrant => ({
+  listNamespaces: false,
+  createNamespaces: false,
+  manageRbac: false,
+});
+
+const resourceCovers = (resources: string[], names: string[]): boolean =>
+  resources.some(
+    (resource) => resource === '*' || names.some((name) => resource === name || resource.startsWith(`${name}/`)),
+  );
+
+const consoleGrantFromRules = (rules: RbacClusterRole['rules']): ConsoleGrant => {
+  const grant = emptyConsoleGrant();
+  (rules ?? []).forEach((rule) => {
+    const verbs = rule.verbs ?? [];
+    const canWrite = verbs.some((verb) => WRITE_VERBS.has(verb));
+    const canList = verbs.some((verb) => verb === '*' || verb === 'list');
+    const resources = rule.resources ?? [];
+    const groups = rule.apiGroups ?? [];
+    const core = groups.some((group) => group === '*' || group === '');
+    const authApi = groups.some((group) => group === '*' || group === CONSOLE_AUTH_API_GROUP);
+    if (core && resourceCovers(resources, ['namespaces'])) {
+      if (canList) {
+        grant.listNamespaces = true;
+      }
+      if (canWrite) {
+        grant.createNamespaces = true;
+      }
+    }
+    if (authApi && canWrite && resourceCovers(resources, CONSOLE_RBAC_RESOURCES)) {
+      grant.manageRbac = true;
+    }
+  });
+  return grant;
+};
+
+const consoleGrantForRole = (role: PlatformRoleKind, clusterRoles: RbacClusterRole[]): ConsoleGrant => {
+  const selectors = role.spec?.kubernetes?.clusterRoleSelectors ?? [];
+  return clusterRoles.reduce((grant, clusterRole) => {
+    const labels = clusterRole.metadata?.labels ?? {};
+    const matches = selectors.some((selector) =>
+      Object.entries(selector.matchLabels ?? {}).every(([key, value]) => labels[key] === value),
+    );
+    if (!matches) {
+      return grant;
+    }
+    const next = consoleGrantFromRules(clusterRole.rules);
+    return {
+      listNamespaces: grant.listNamespaces || next.listNamespaces,
+      createNamespaces: grant.createNamespaces || next.createNamespaces,
+      manageRbac: grant.manageRbac || next.manageRbac,
+    };
+  }, emptyConsoleGrant());
+};
+
 /**
- * UI admin vs contributor comes from kubernetes aggregation plus
- * `nova-ai.io/console-persona: admin`. Experiments, Workbench and Pipelines come
- * from OIDC groups nova-ai-mlflow|airflow.<namespace>.admins|developers|viewers and
+ * Console admin comes from ClusterRole rules, scoped by the binding target:
+ * list/create on namespaces and write on platformroles and platformrolebindings.
+ * target Cluster applies that to every project. target Namespaces limits role
+ * management to the listed projects and does not open project creation.
+ * Experiments, Workbench and Pipelines come from OIDC groups
+ * nova-ai-mlflow|airflow.<namespace>.admins|developers|viewers and
  * nova-ai-jupyterhub.<namespace>.admins|developers.
- * Deployments comes from ClusterRole rules on serving.kserve.io, scoped by the
- * binding target. kubernetes.target still decides which namespaces are listed.
+ * Deployments comes from ClusterRole rules on serving.kserve.io, scoped the same way.
  */
 export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
   const rolesByName = new Map(input.roles.map((role) => [role.metadata.name, role]));
@@ -536,6 +602,9 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
   const deploymentWriters = new Set<string>();
   const visibleProjects = new Set<string>();
   let seesAllProjects = false;
+  let canCreateProjects = false;
+  let clusterManageRbac = false;
+  const projectRbacWriters = new Set<string>();
   let clusterDeploymentRead = false;
   let clusterDeploymentWrite = false;
   let canEditKserveCluster = false;
@@ -549,27 +618,29 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
     if (!role) {
       continue;
     }
-    const boundRole = consoleRoleFromPlatformRole(role);
     const services = servicesFromRole(role);
+    const presetRole = consoleRoleFromPlatformRole(role);
     const target =
       binding.status?.appliedTarget?.target ?? binding.spec.kubernetes?.target ?? 'None';
     const namespaces =
       binding.status?.appliedTarget?.namespaces ?? binding.spec.kubernetes?.namespaces ?? [];
     const namespacedKserve = kserveGrantForRole(role, clusterRoles, 'namespace');
     const clusterKserve = kserveGrantForRole(role, clusterRoles, 'cluster');
+    const consoleGrant = consoleGrantForRole(role, clusterRoles);
     const kserve = target === 'Cluster' ? clusterKserve : namespacedKserve;
     if (clusterKserve.writeCluster) {
       canEditKserveCluster = true;
     }
 
-    if (boundRole !== 'none') {
-      consoleRole = maxRole(consoleRole, boundRole);
-    }
+    const namespaceRole: ConsoleRole = consoleGrant.manageRbac ? 'admin' : presetRole;
 
     if (target === 'Namespaces') {
       namespaces.forEach((namespace) => {
         visibleProjects.add(namespace);
-        projectRoles.set(namespace, maxRole(projectRoles.get(namespace) ?? 'none', boundRole));
+        projectRoles.set(namespace, maxRole(projectRoles.get(namespace) ?? 'none', namespaceRole));
+        if (consoleGrant.manageRbac) {
+          projectRbacWriters.add(namespace.toLowerCase());
+        }
         const namespaceServices = [...services];
         if (kserve.read) {
           namespaceServices.push('deployments');
@@ -586,6 +657,20 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
     }
 
     if (target === 'Cluster') {
+      if (consoleGrant.listNamespaces) {
+        seesAllProjects = true;
+      }
+      if (consoleGrant.createNamespaces) {
+        canCreateProjects = true;
+      }
+      if (consoleGrant.manageRbac) {
+        clusterManageRbac = true;
+      }
+      const clusterConsoleRole: ConsoleRole =
+        consoleGrant.manageRbac || consoleGrant.createNamespaces ? 'admin' : presetRole;
+      if (clusterConsoleRole !== 'none') {
+        consoleRole = maxRole(consoleRole, clusterConsoleRole);
+      }
       if (kserve.read) {
         clusterDeploymentRead = true;
       }
@@ -595,10 +680,6 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
     }
 
     clusterServices.push(...services);
-  }
-
-  if (consoleRole === 'admin') {
-    seesAllProjects = true;
   }
 
   componentServices.forEach((_services, namespace) => {
@@ -624,7 +705,7 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
   return {
     source: 'oidc',
     consoleRole,
-    canCreateProjects: consoleRole === 'admin',
+    canCreateProjects,
     canEditKserveCluster,
     username: input.user.username,
     services: grantedServices,
@@ -646,7 +727,9 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
       ]);
       const canEditDeployments =
         clusterDeploymentWrite || deploymentWriters.has(projectName.toLowerCase());
-      return projectAccessFrom(role, services, canEditDeployments);
+      const canManageRbac =
+        clusterManageRbac || projectRbacWriters.has(projectName.toLowerCase());
+      return projectAccessFrom(role, services, canEditDeployments, canManageRbac);
     },
     canViewProject: (projectName: string) =>
       seesAllProjects || visibleProjects.has(projectName),

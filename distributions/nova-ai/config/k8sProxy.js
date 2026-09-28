@@ -3,13 +3,14 @@ const https = require('https');
 const crypto = require('crypto');
 const { URL } = require('url');
 const { kubeconfigFromEnv } = require('./loadEnv');
+const { identityFromToken } = require('./oidcIdentity');
 
 const PROXY_PREFIX = '/k8s-proxy';
 const SESSION_PATH = '/k8s-session';
 const OIDC_FORWARD_PATH = '/oidc-forward';
 const OIDC_PKCE_PATH = '/oidc-pkce';
 
-/** @type {Map<string, { apiServer: string, token?: string, cert?: Buffer, key?: Buffer, ca?: Buffer }>} */
+/** @type {Map<string, { apiServer: string, ca?: Buffer }>} */
 const sessions = new Map();
 
 const sendJson = (res, statusCode, body) => {
@@ -48,31 +49,11 @@ const envClusterSession = (() => {
   if (!kubeconfigFromEnv?.apiServer) {
     return null;
   }
-  const token =
-    typeof kubeconfigFromEnv.token === 'string' && kubeconfigFromEnv.token.trim() !== ''
-      ? kubeconfigFromEnv.token.trim()
-      : undefined;
-  const cert = decodePem(kubeconfigFromEnv.clientCertificateData);
-  const key = decodePem(kubeconfigFromEnv.clientKeyData);
-  const ca = decodePem(kubeconfigFromEnv.certificateAuthorityData);
-  if (!token && !(cert && key)) {
-    return null;
-  }
   return {
     apiServer: kubeconfigFromEnv.apiServer,
-    token,
-    cert,
-    key,
-    ca,
+    ca: decodePem(kubeconfigFromEnv.certificateAuthorityData),
   };
 })();
-
-if (kubeconfigFromEnv?.apiServer && !envClusterSession) {
-  // eslint-disable-next-line no-console
-  console.warn(
-    '[k8s-proxy] KUBECONFIG_BASE64 has a cluster URL but no token or client-certificate-data and client-key-data.',
-  );
-}
 
 const createSession = () => {
   if (!envClusterSession) {
@@ -96,8 +77,6 @@ const requestK8s = (target, method, headers, bodyStream, tls) =>
         method,
         headers,
         rejectUnauthorized: false,
-        cert: tls.cert,
-        key: tls.key,
         ca: tls.ca,
       },
       (proxyRes) => resolve({ proxyReq, proxyRes }),
@@ -281,8 +260,10 @@ const handleOidcForward = (req, res) => {
 };
 
 /**
- * Browser cannot speak Kubernetes mTLS or skip CORS, so the webpack dev server
- * holds credentials in a short-lived session and forwards `/k8s-proxy/*`.
+ * Browser cannot speak to the API server directly, so the webpack dev server
+ * forwards `/k8s-proxy/*`. Kubeconfig supplies the API address and CA.
+ * Authorization is the signed-in user's verified OIDC ID token, the same way
+ * nova-console sends the user bearer. The kubeconfig user is not used.
  */
 const k8sProxyMiddleware = (req, res, next) => {
   const url = req.url || '';
@@ -330,14 +311,17 @@ const k8sProxyMiddleware = (req, res, next) => {
     return;
   }
 
+  const userToken = req.headers['x-nova-id-token'];
+  if (typeof userToken !== 'string' || userToken.trim() === '') {
+    sendJson(res, 401, { message: 'Sign in before calling the cluster.' });
+    return;
+  }
+
   const method = req.method || 'GET';
   const hasBody = method !== 'GET' && method !== 'HEAD';
   const headers = {
     accept: req.headers.accept || 'application/json',
   };
-  if (session.token) {
-    headers.authorization = `Bearer ${session.token}`;
-  }
   if (req.headers['content-type']) {
     headers['content-type'] = req.headers['content-type'];
   }
@@ -345,7 +329,12 @@ const k8sProxyMiddleware = (req, res, next) => {
     headers['content-length'] = req.headers['content-length'];
   }
 
-  requestK8s(target, method, headers, hasBody ? req : undefined, session)
+  const idToken = userToken.trim();
+  identityFromToken(idToken)
+    .then(() => {
+      headers.authorization = `Bearer ${idToken}`;
+      return requestK8s(target, method, headers, hasBody ? req : undefined, session);
+    })
     .then(({ proxyRes }) => {
       res.statusCode = proxyRes.statusCode || 502;
       const contentType = proxyRes.headers['content-type'];
@@ -359,7 +348,11 @@ const k8sProxyMiddleware = (req, res, next) => {
         res.end();
         return;
       }
-      sendJson(res, 502, { message: error instanceof Error ? error.message : String(error) });
+      const message = error instanceof Error ? error.message : String(error);
+      const statusCode = message.startsWith('OIDC') || message.includes('token') || message.includes('STARVAULT')
+        ? 401
+        : 502;
+      sendJson(res, statusCode, { message });
     });
 };
 

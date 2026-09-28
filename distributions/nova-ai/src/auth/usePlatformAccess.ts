@@ -2,7 +2,6 @@ import * as React from 'react';
 import { K8sApiError } from '../cluster/k8sClient';
 import { useClusterConnection } from '../cluster/useClusterConnection';
 import {
-  bootstrapAccess,
   computePlatformAccess,
   emptyAccess,
   enrichUserFromPlatformDirectory,
@@ -109,7 +108,7 @@ export const usePlatformAccess = (): PlatformAccessState => {
 
   React.useEffect(() => {
     if (!session) {
-      resetPlatformAccess(bootstrapAccess());
+      resetPlatformAccess(emptyAccess('oidc'));
       return;
     }
     if (!connection) {

@@ -1,4 +1,4 @@
-import { bootstrapAccess, emptyAccess } from './access';
+import { emptyAccess } from './access';
 import type { PlatformAccess } from './types';
 
 export type PlatformAccessSnapshot = {
@@ -37,7 +37,7 @@ export const setPlatformAccessSnapshot = (next: Partial<PlatformAccessSnapshot>)
   emit();
 };
 
-export const resetPlatformAccess = (access: PlatformAccess = bootstrapAccess()): void => {
+export const resetPlatformAccess = (access: PlatformAccess = emptyAccess('oidc')): void => {
   snapshot = {
     access,
     error: null,

@@ -1,3 +1,4 @@
+import { getAuthSession } from '../auth/authSession';
 import { getClusterConnection } from './connectionStore';
 import { hasClusterCredentials, type K8sStatus } from './types';
 
@@ -87,10 +88,17 @@ export const k8sRequest = async <T>(path: string, options: RequestOptions = {}):
     );
   }
 
+  const auth = getAuthSession();
+  const userToken = auth?.idToken;
+  if (!userToken) {
+    throw new K8sApiError('Sign in before calling the cluster. An OIDC ID token is required.');
+  }
+
   const sessionId = await ensureSession();
   const headers: Record<string, string> = {
     Accept: 'application/json',
     'X-Cluster-Session': sessionId,
+    'X-Nova-Id-Token': userToken,
   };
   const init: RequestInit = {
     method: options.method ?? 'GET',
