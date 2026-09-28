@@ -5,7 +5,7 @@ export type ConsoleNavService = {
   description: string;
 };
 
-/** Sidebar + project tabs gated by nova-ai.io/<id>-enabled: "true". */
+/** Sidebar items. Visibility follows OIDC groups, not PlatformRole labels. */
 export const CONSOLE_NAV_SERVICES: ConsoleNavService[] = [
   {
     id: 'workbench',
@@ -29,13 +29,10 @@ export const CONSOLE_NAV_SERVICES: ConsoleNavService[] = [
 
 export const CONSOLE_NAV_SERVICE_TITLES = CONSOLE_NAV_SERVICES.map((item) => item.title);
 
-/** Project-only tab, same enabled-label gating, no sidebar item. */
+/** Project tab. Shown when the user is in a nova-ai-airflow.<namespace>.<level> group. */
 export const PIPELINES_SERVICE = 'Pipelines';
 
 export const CONSOLE_TAB_SERVICES: Array<{ id: string; title: string }> = [
   ...CONSOLE_NAV_SERVICES.map(({ id, title }) => ({ id, title })),
   { id: 'pipelines', title: PIPELINES_SERVICE },
 ];
-
-export const consoleServiceEnabledLabel = (serviceId: string): string =>
-  `nova-ai.io/${serviceId.trim().toLowerCase().replace(/\s+/g, '-')}-enabled`;

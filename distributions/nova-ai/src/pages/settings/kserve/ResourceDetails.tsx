@@ -35,7 +35,6 @@ import {
 } from './catalog';
 import {
   asRecord,
-  canEditSettingsKind,
   containerSummary,
   formatLabelMap,
   isPreInstalled,
@@ -72,8 +71,9 @@ const ResourceDetails: React.FC = () => {
   const canEdit =
     item !== null &&
     !isPreInstalled(item) &&
-    canEditSettingsKind(kind.kind, access.consoleRole) &&
-    (kind.scope === 'Cluster' || access.forProject(namespace ?? '').canEdit);
+    (kind.scope === 'Cluster'
+      ? access.canEditKserveCluster
+      : access.forProject(namespace ?? '').canEditDeployments);
 
   const load = React.useCallback(async () => {
     setIsLoading(true);

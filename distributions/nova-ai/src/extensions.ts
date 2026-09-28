@@ -132,6 +132,14 @@ const extensions: Extension[] = [
   {
     type: 'app.masthead/toolbar-item',
     properties: {
+      id: 'project-switcher',
+      position: 'leading',
+      component: () => import('./pages/projects/ProjectSwitcher'),
+    },
+  } satisfies MastheadToolbarItemExtension,
+  {
+    type: 'app.masthead/toolbar-item',
+    properties: {
       id: 'oidc-session',
       position: 'trailing',
       component: () => import('./auth/AuthToolbarItem'),

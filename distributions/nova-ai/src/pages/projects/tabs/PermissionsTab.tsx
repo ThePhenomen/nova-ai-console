@@ -25,6 +25,7 @@ import {
   listPlatformRoleBindings,
   listPlatformRoles,
 } from '../../../auth/platformApi';
+import { bindingAppliesToProject } from '../../../auth/access';
 import type { PlatformRoleBindingKind, PlatformRoleKind } from '../../../auth/types';
 import { K8sApiError } from '../../../cluster/k8sClient';
 import { consoleScopeLabels, GRANTED_IN_PROJECT_ANNOTATION } from '../../../consoleScope';
@@ -64,12 +65,8 @@ const bindingTarget = (binding: PlatformRoleBindingKind): string => {
   return String(target);
 };
 
-const appliesToProject = (binding: PlatformRoleBindingKind, projectName: string): boolean => {
-  const target = binding.status?.appliedTarget?.target ?? binding.spec.kubernetes?.target ?? 'None';
-  const namespaces =
-    binding.status?.appliedTarget?.namespaces ?? binding.spec.kubernetes?.namespaces ?? [];
-  return target === 'Cluster' || (target === 'Namespaces' && namespaces.includes(projectName));
-};
+const appliesToProject = (binding: PlatformRoleBindingKind, projectName: string): boolean =>
+  bindingAppliesToProject(binding, projectName);
 
 const canRevokeInProject = (binding: PlatformRoleBindingKind, projectName: string): boolean =>
   binding.metadata.annotations?.[GRANTED_IN_PROJECT_ANNOTATION] === projectName;
@@ -129,6 +126,8 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
       setFormError('Subject name and platform role are required.');
       return;
     }
+    const selected = roles.find((role) => role.metadata.name === roleName);
+    const hasKubernetes = (selected?.spec?.kubernetes?.clusterRoleSelectors?.length ?? 0) > 0;
     setIsSaving(true);
     try {
       await createPlatformRoleBinding({
@@ -144,10 +143,9 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
         spec: {
           platformRoleRef: { name: roleName },
           subjects: [{ kind: subjectKind, name }],
-          kubernetes: {
-            target: 'Namespaces',
-            namespaces: [projectName],
-          },
+          ...(hasKubernetes
+            ? { kubernetes: { target: 'Namespaces', namespaces: [projectName] } }
+            : { kubernetes: { target: 'None' } }),
         },
       });
       setSubjectName('');
@@ -298,8 +296,10 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
       {bindings.length === 0 ? (
         <EmptyState headingLevel="h2" titleText="No permissions">
           <EmptyStateBody>
-            Grant a Nova AI PlatformRole to a User or Group in this project. Use nova-ai-mlflow
-            for the Experiments tab.
+            Grant a Nova AI PlatformRole to a User or Group in this project. Experiments and
+            Pipelines appear from groups {`nova-ai-mlflow|airflow.<namespace>.admins|developers|viewers`}.
+            Workbench appears from {`nova-ai-jupyterhub.<namespace>.admins|developers`}.
+            Deployments appears when a bound ClusterRole allows serving.kserve.io in this project.
           </EmptyStateBody>
         </EmptyState>
       ) : (

@@ -41,7 +41,7 @@ export const formatOidcError = (raw: string): OidcError => {
     text.includes('permission denied')
   ) {
     return new OidcError(
-      'This user can sign in to StarVault, but has no OIDC assignment for the console. Create a PlatformRoleBinding to nova-ai-admin, nova-ai-developer, or nova-ai-mlflow.',
+      'This user can sign in to StarVault, but has no OIDC assignment for the console. Create a PlatformRoleBinding to nova-ai-admin or nova-ai-developer.',
       'No platform role assigned',
     );
   }

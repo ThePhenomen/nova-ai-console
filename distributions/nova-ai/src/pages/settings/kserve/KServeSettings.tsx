@@ -51,7 +51,6 @@ import {
   type SettingsKindCatalog,
 } from './catalog';
 import {
-  canEditSettingsKind,
   containerSummary,
   duplicateResource,
   isPreInstalled,
@@ -114,23 +113,22 @@ const KServeSettings: React.FC = () => {
       ? requestedProject
       : '';
 
-  const canEditCluster = access.consoleRole === 'admin';
-  const editableNamespaces = namespaces.filter((namespace) => access.forProject(namespace).canEdit);
+  const canEditCluster = access.canEditKserveCluster;
+  const editableNamespaces = namespaces.filter(
+    (namespace) => access.forProject(namespace).canEditDeployments,
+  );
   const canCreate =
     kind.scope === 'Cluster'
       ? canEditCluster
       : selectedProject
-        ? access.forProject(selectedProject).canEdit
+        ? access.forProject(selectedProject).canEditDeployments
         : editableNamespaces.length > 0;
   const canEditItem = (item: KServeSettingsResource): boolean => {
     if (isPreInstalled(item)) {
       return false;
     }
-    if (!canEditSettingsKind(kind.kind, access.consoleRole)) {
-      return false;
-    }
     if (kind.scope === 'Namespaced') {
-      return access.forProject(item.metadata.namespace ?? '').canEdit;
+      return access.forProject(item.metadata.namespace ?? '').canEditDeployments;
     }
     return canEditCluster;
   };

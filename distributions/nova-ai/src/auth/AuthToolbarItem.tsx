@@ -2,7 +2,7 @@ import React from 'react';
 import { Button, Label } from '@patternfly/react-core';
 import { UserIcon } from '@patternfly/react-icons';
 import { usePluginStore } from '@nova-ai/plugin-core';
-import { hasConsoleService } from './access';
+import { hasProjectService } from './access';
 import { CONSOLE_NAV_SERVICES } from '../consoleServices';
 import { getEnvOidcConfig } from './envOidc';
 import OidcLoginModal from './OidcLoginModal';
@@ -10,23 +10,26 @@ import { getOidcConfig } from './oidcStore';
 import { logoutOidc, startOidcLogin } from './oidcClient';
 import { useAuthSession } from './useAuthSession';
 import { usePlatformAccess } from './usePlatformAccess';
+import { useSelectedProject } from '../pages/projects/selectedProjectStore';
 
 const AuthToolbarItem: React.FC = () => {
   const store = usePluginStore();
   const [session] = useAuthSession();
   const { access } = usePlatformAccess();
+  const selectedProject = useSelectedProject();
   const [isOpen, setIsOpen] = React.useState(false);
 
   React.useEffect(() => {
+    const projectAccess = selectedProject ? access.forProject(selectedProject) : null;
     store.setFeatureFlags(
       Object.fromEntries(
         CONSOLE_NAV_SERVICES.map((service) => [
           service.id,
-          hasConsoleService(access, service.title),
+          projectAccess ? hasProjectService(projectAccess, service.title) : false,
         ]),
       ),
     );
-  }, [access, store]);
+  }, [access, selectedProject, store]);
 
   const signIn = async () => {
     const config = getEnvOidcConfig() ?? getOidcConfig();

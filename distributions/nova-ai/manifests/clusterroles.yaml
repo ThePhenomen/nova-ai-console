@@ -1,7 +1,7 @@
-# ClusterRoles aggregated by nova-ai-admin / nova-ai-developer / nova-ai-viewer.
+# ClusterRoles aggregated by nova-ai-admin / nova-ai-developer.
 # PlatformRole.kubernetes.clusterRoleSelectors only matches ClusterRole.
-# Bind via PlatformRoleBinding kubernetes.target: Namespaces (developer/viewer
-# in a project) or Cluster (admin creating projects).
+# Bind via PlatformRoleBinding kubernetes.target: Namespaces (developer in a
+# project) or Cluster (admin creating projects).
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -18,70 +18,7 @@ rules:
     verbs: ["get"]
   # Namespaced quota/pod/event view in the bound project.
   - apiGroups: [""]
-    resources: ["resourcequotas", "pods", "pods/status", "events"]
-    verbs: ["get", "list", "watch"]
-  # Namespaced KServe CRs — full access in the bound namespace.
-  - apiGroups: ["serving.kserve.io"]
-    resources:
-      - inferencegraphs
-      - inferenceservices
-      - llminferenceserviceconfigs
-      - llminferenceservices
-      - localmodelnodes
-      - servingruntimes
-      - trainedmodels
-    verbs: ["*"]
-  # Cluster-scoped KServe CRs: view only (RoleBinding would otherwise grant
-  # cluster-wide write).
-  - apiGroups: ["serving.kserve.io"]
-    resources:
-      - clusterservingruntimes
-      - clusterstoragecontainers
-      - localmodelnodegroups
-      - localmodelcaches
-    verbs: ["get", "list", "watch"]
-  # Namespaced Ray CRs — full access in the bound namespace.
-  - apiGroups: ["ray.io"]
-    resources:
-      - rayclusters
-      - rayjobs
-      - rayservices
-    verbs: ["*"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: nova-ai-aggregate-viewer
-  labels:
-    nova-ai.io/console: nova-ai-console
-    nova-ai.io/aggregate-to-viewer: "true"
-rules:
-  # Same resources as developer, read-only.
-  - apiGroups: [""]
-    resources: ["namespaces"]
-    verbs: ["get"]
-  - apiGroups: [""]
-    resources: ["resourcequotas", "pods", "pods/status", "events"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["serving.kserve.io"]
-    resources:
-      - inferencegraphs
-      - inferenceservices
-      - llminferenceserviceconfigs
-      - llminferenceservices
-      - localmodelnodes
-      - servingruntimes
-      - trainedmodels
-      - clusterservingruntimes
-      - clusterstoragecontainers
-      - localmodelnodegroups
-      - localmodelcaches
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["ray.io"]
-    resources:
-      - rayclusters
-      - rayjobs
-      - rayservices
+    resources: ["resourcequotas"]
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -107,10 +44,90 @@ rules:
       - platformroles/status
       - platformrolebindings/status
     verbs: ["*"]
-  # Cluster-scoped KServe config. Developers only get list/watch on these.
+---
+# KServe is separate from console roles. nova-ai-kserve-admin may create and edit
+# ClusterServingRuntime and ClusterStorageContainer. Pre-installed objects stay
+# read-only in the console. A namespace binding still limits InferenceService
+# writes to the listed projects.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nova-ai-aggregate-kserve-admin
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/aggregate-to-kserve-admin: "true"
+rules:
+  - apiGroups: ["serving.kserve.io"]
+    resources:
+      - inferencegraphs
+      - inferenceservices
+      - llminferenceserviceconfigs
+      - llminferenceservices
+      - localmodelnodes
+      - servingruntimes
+      - trainedmodels
+      - clusterservingruntimes
+      - clusterstoragecontainers
+      - localmodelnodegroups
+      - localmodelcaches
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nova-ai-aggregate-kserve-developer
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/aggregate-to-kserve-developer: "true"
+rules:
+  - apiGroups: ["serving.kserve.io"]
+    resources:
+      - inferencegraphs
+      - inferenceservices
+      - llminferenceserviceconfigs
+      - llminferenceservices
+      - localmodelnodes
+      - servingruntimes
+      - trainedmodels
+    verbs: ["*"]
   - apiGroups: ["serving.kserve.io"]
     resources:
       - clusterservingruntimes
       - clusterstoragecontainers
+      - localmodelnodegroups
       - localmodelcaches
-    verbs: ["*"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nova-ai-aggregate-kserve-viewer
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/aggregate-to-kserve-viewer: "true"
+rules:
+  - apiGroups: ["serving.kserve.io"]
+    resources:
+      - inferencegraphs
+      - inferenceservices
+      - llminferenceserviceconfigs
+      - llminferenceservices
+      - localmodelnodes
+      - servingruntimes
+      - trainedmodels
+      - clusterservingruntimes
+      - clusterstoragecontainers
+      - localmodelnodegroups
+      - localmodelcaches
+    verbs: ["get", "list", "watch"]
+---
+# No rules. A PlatformRole for one project OIDC client selects this so a
+# namespace binding reconciles without granting Kubernetes rights.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nova-ai-aggregate-component
+  labels:
+    nova-ai.io/console: nova-ai-console
+    nova-ai.io/aggregate-to-component: "true"
+rules: []

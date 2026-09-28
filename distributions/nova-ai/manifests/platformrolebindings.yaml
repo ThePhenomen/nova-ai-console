@@ -1,6 +1,6 @@
 # WHERE lives on PlatformRoleBinding, not on PlatformRole or User.
 # target: Cluster → console lists every nova-ai-console project (admin).
-# target: Namespaces → only the listed projects (developer/viewer).
+# target: Namespaces → only the listed projects (developer).
 # Sidebar and project extras (Workbench, Experiments, Deployments) come from
 # nova-ai.io/<tab>-enabled: "true" on the bound PlatformRole.
 ---
@@ -24,33 +24,14 @@ spec:
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRoleBinding
 metadata:
-  name: nova-ai-viewer-ml-team
-  labels:
-    nova-ai.io/console: nova-ai-console
-spec:
-  platformRoleRef:
-    name: nova-ai-viewer
-  subjects:
-    - kind: Group
-      name: REPLACE_WITH_GROUP_CR_NAME
-  kubernetes:
-    target: Namespaces
-    namespaces:
-      - ml-team
----
-apiVersion: auth.nova-platform.io/v1alpha1
-kind: PlatformRoleBinding
-metadata:
   name: nova-ai-mlflow-ml-team
   labels:
     nova-ai.io/console: nova-ai-console
 spec:
   platformRoleRef:
-    name: nova-ai-mlflow
+    name: nova-ai-mlflow.ml-team
   subjects:
     - kind: Group
-      name: REPLACE_WITH_GROUP_CR_NAME
+      name: nova-ai-mlflow.ml-team.admins
   kubernetes:
-    target: Namespaces
-    namespaces:
-      - ml-team
+    target: None

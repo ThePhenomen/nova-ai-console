@@ -55,7 +55,7 @@ const DeploymentDetails: React.FC<DeploymentDetailsProps> = ({ projectScoped = f
   const [isDeleting, setIsDeleting] = React.useState(false);
 
   const listPath = projectScoped ? `/projects/${namespace}/deployments` : '/deployments';
-  const canEdit = access.forProject(namespace).canEdit;
+  const canEdit = access.forProject(namespace).canEditDeployments;
 
   const load = React.useCallback(async () => {
     setIsLoading(true);

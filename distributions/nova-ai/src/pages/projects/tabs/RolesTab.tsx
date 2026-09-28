@@ -3,7 +3,6 @@ import {
   Alert,
   Bullseye,
   Button,
-  Checkbox,
   EmptyState,
   EmptyStateBody,
   Form,
@@ -13,6 +12,7 @@ import {
   FormSelectOption,
   HelperText,
   HelperTextItem,
+  Label,
   PageSection,
   Spinner,
   TextInput,
@@ -22,11 +22,16 @@ import {
 } from '@patternfly/react-core';
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import {
+  bindingAppliesToProject,
+  componentOidcApplication,
   CONSOLE_OIDC_APPLICATION,
   CONSOLE_PERSONA_LABEL,
   KUBERNETES_ACCESS_PRESETS,
+  OIDC_APPLICATION_NAME,
   canonicalConsoleService,
   kubernetesAccessFromRole,
+  oidcApplicationsWithConsole,
+  roleIsOidcClient,
   servicesFromRole,
   type KubernetesAccessLevel,
 } from '../../../auth/access';
@@ -35,22 +40,36 @@ import {
   dns1123Name,
   listPlatformRoleBindings,
   listPlatformRoles,
+  updatePlatformRole,
 } from '../../../auth/platformApi';
 import type { PlatformRoleKind } from '../../../auth/types';
 import { K8sApiError } from '../../../cluster/k8sClient';
-import { CONSOLE_TAB_SERVICES, consoleServiceEnabledLabel } from '../../../consoleServices';
+import { CONSOLE_TAB_SERVICES } from '../../../consoleServices';
 import { consoleScopeLabels } from '../../../consoleScope';
 
 type RolesTabProps = {
   projectName: string;
 };
 
-const ACCESS_OPTIONS = (Object.keys(KUBERNETES_ACCESS_PRESETS) as Array<
-  Exclude<KubernetesAccessLevel, 'none'>
->).map((id) => ({
-  id,
-  title: KUBERNETES_ACCESS_PRESETS[id].title,
-}));
+type RoleCreateAccess = Exclude<KubernetesAccessLevel, 'none'> | 'oidc';
+
+const ACCESS_OPTIONS: Array<{ id: RoleCreateAccess; title: string }> = [
+  ...(Object.keys(KUBERNETES_ACCESS_PRESETS) as Array<Exclude<KubernetesAccessLevel, 'none'>>).map(
+    (id) => ({
+      id,
+      title: KUBERNETES_ACCESS_PRESETS[id].title,
+    }),
+  ),
+  { id: 'oidc', title: 'OIDC client' },
+];
+
+const consoleAccessTitle = (role: PlatformRoleKind): string => {
+  const access = kubernetesAccessFromRole(role);
+  if (access !== 'none') {
+    return KUBERNETES_ACCESS_PRESETS[access].title;
+  }
+  return roleIsOidcClient(role) ? 'OIDC client' : '—';
+};
 
 const formatList = (values: string[]): string => (values.length > 0 ? values.join(', ') : '—');
 
@@ -71,10 +90,11 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
   const [name, setName] = React.useState('');
-  const [accessLevel, setAccessLevel] =
-    React.useState<Exclude<KubernetesAccessLevel, 'none'>>('developer');
-  const [enabledServices, setEnabledServices] = React.useState<string[]>([]);
+  const [accessLevel, setAccessLevel] = React.useState<RoleCreateAccess>('developer');
   const [isFormOpen, setIsFormOpen] = React.useState(false);
+  const [applicationDrafts, setApplicationDrafts] = React.useState<Record<string, string>>({});
+  const [savingRole, setSavingRole] = React.useState<string | null>(null);
+  const [applicationError, setApplicationError] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setIsLoading(true);
@@ -89,20 +109,11 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
       setBoundRoleNames(
         new Set(
           nextBindings
-            .filter((binding) => {
-              if (!consoleRoleNames.has(binding.spec.platformRoleRef.name)) {
-                return false;
-              }
-              const target =
-                binding.status?.appliedTarget?.target ?? binding.spec.kubernetes?.target ?? 'None';
-              const namespaces =
-                binding.status?.appliedTarget?.namespaces ??
-                binding.spec.kubernetes?.namespaces ??
-                [];
-              return (
-                target === 'Cluster' || (target === 'Namespaces' && namespaces.includes(projectName))
-              );
-            })
+            .filter(
+              (binding) =>
+                consoleRoleNames.has(binding.spec.platformRoleRef.name) &&
+                bindingAppliesToProject(binding, projectName),
+            )
             .map((binding) => binding.spec.platformRoleRef.name),
         ),
       );
@@ -121,7 +132,6 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const resetForm = () => {
     setName('');
     setAccessLevel('developer');
-    setEnabledServices([]);
     setIsFormOpen(false);
     setFormError(null);
   };
@@ -129,22 +139,35 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormError(null);
-    const roleName = dns1123Name(name.trim());
-    if (!name.trim()) {
+    const trimmed = name.trim().toLowerCase();
+    if (!trimmed) {
       setFormError('Role name is required.');
       return;
     }
-    const preset = KUBERNETES_ACCESS_PRESETS[accessLevel];
+    const isOidcClient = accessLevel === 'oidc';
+    const roleName = isOidcClient ? trimmed : dns1123Name(trimmed);
+    if (
+      isOidcClient &&
+      !/^nova-ai-(mlflow|airflow|jupyterhub)\.[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(roleName)
+    ) {
+      setFormError(
+        'Name an instance role as nova-ai-mlflow.team-a, nova-ai-airflow.team-a, or nova-ai-jupyterhub.team-a.',
+      );
+      return;
+    }
+    const preset = isOidcClient ? undefined : KUBERNETES_ACCESS_PRESETS[accessLevel];
     const labels: Record<string, string> = { ...consoleScopeLabels() };
-    if (preset.persona) {
+    if (preset?.persona) {
       labels[CONSOLE_PERSONA_LABEL] = preset.persona;
     }
-    enabledServices.forEach((serviceId) => {
-      labels[consoleServiceEnabledLabel(serviceId)] = 'true';
-    });
-    const clusterRoleSelectors = preset.selectors.map((key) => ({
-      matchLabels: { [key]: 'true' },
-    }));
+    const clusterRoleSelectors = isOidcClient
+      ? []
+      : (preset?.selectors ?? []).map((key) => ({
+          matchLabels: { [key]: 'true' },
+        }));
+    const applications = isOidcClient
+      ? [componentOidcApplication(roleName)]
+      : [CONSOLE_OIDC_APPLICATION];
     setIsSaving(true);
     try {
       await createPlatformRole({
@@ -154,7 +177,7 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
         spec: {
           ...(clusterRoleSelectors.length > 0 ? { kubernetes: { clusterRoleSelectors } } : {}),
           oidc: {
-            applications: [CONSOLE_OIDC_APPLICATION],
+            applications,
           },
         },
       });
@@ -169,6 +192,50 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const saveApplications = async (role: PlatformRoleKind, applications: string[]) => {
+    const keepsConsole = (role.spec?.oidc?.applications ?? []).includes(CONSOLE_OIDC_APPLICATION);
+    const next = keepsConsole
+      ? oidcApplicationsWithConsole(applications)
+      : [...new Set(applications.map((value) => value.trim()).filter((value) => value !== ''))];
+    setApplicationError(null);
+    setSavingRole(role.metadata.name);
+    try {
+      await updatePlatformRole({
+        ...role,
+        spec: {
+          ...role.spec,
+          oidc: { applications: next },
+        },
+      });
+      setApplicationDrafts((current) => ({ ...current, [role.metadata.name]: '' }));
+      await load();
+    } catch (err) {
+      setApplicationError(
+        err instanceof K8sApiError || err instanceof Error
+          ? err.message
+          : 'Failed to update OIDC applications.',
+      );
+    } finally {
+      setSavingRole(null);
+    }
+  };
+
+  const addApplication = (role: PlatformRoleKind) => {
+    const next = (applicationDrafts[role.metadata.name] ?? '').trim();
+    if (!OIDC_APPLICATION_NAME.test(next)) {
+      setApplicationError(
+        'OIDC application name must start with a letter or digit and contain only letters, digits, ".", "_" and "-".',
+      );
+      return;
+    }
+    const current = role.spec?.oidc?.applications ?? [];
+    if (current.includes(next)) {
+      setApplicationDrafts((drafts) => ({ ...drafts, [role.metadata.name]: '' }));
+      return;
+    }
+    void saveApplications(role, [...current, next]);
   };
 
   if (isLoading) {
@@ -221,7 +288,7 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
               id="create-role-name"
               value={name}
               onChange={(_event, value) => setName(value)}
-              placeholder="nova-ai-experiments"
+              placeholder={accessLevel === 'oidc' ? 'nova-ai-jupyterhub.team-a' : 'nova-ai-experiments'}
               isRequired
             />
           </FormGroup>
@@ -229,9 +296,7 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
             <FormSelect
               id="create-role-access"
               value={accessLevel}
-              onChange={(_event, value) =>
-                setAccessLevel(value as Exclude<KubernetesAccessLevel, 'none'>)
-              }
+              onChange={(_event, value) => setAccessLevel(value as RoleCreateAccess)}
               aria-label="Kubernetes access"
             >
               {ACCESS_OPTIONS.map((option) => (
@@ -241,32 +306,9 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
             <FormHelperText>
               <HelperText>
                 <HelperTextItem>
-                  Admin can create projects and manage roles. Developer has full access to project
-                  KServe and Ray resources. Viewer has the same resources, read-only.
-                </HelperTextItem>
-              </HelperText>
-            </FormHelperText>
-          </FormGroup>
-          <FormGroup label="Console services" fieldId="create-role-services">
-            {CONSOLE_TAB_SERVICES.map((service) => (
-              <Checkbox
-                key={service.id}
-                id={`create-role-service-${service.id}`}
-                label={service.title}
-                isChecked={enabledServices.includes(service.id)}
-                onChange={(_event, checked) =>
-                  setEnabledServices((current) =>
-                    checked
-                      ? [...current, service.id]
-                      : current.filter((item) => item !== service.id),
-                  )
-                }
-              />
-            ))}
-            <FormHelperText>
-              <HelperText>
-                <HelperTextItem>
-                  Unlocks the matching sidebar and project tabs. Projects is always shown.
+                  {accessLevel === 'oidc'
+                    ? 'One role per instance, named nova-ai-mlflow.team-a, nova-ai-airflow.team-a, or nova-ai-jupyterhub.team-a. It logs into nova-ai-<component>-<namespace>. Bind admins, developers, and viewers to it. JupyterHub has no viewers group.'
+                    : 'Admin can create projects and manage roles. Developer opens the bound projects. Component tabs follow OIDC groups, and KServe follows its own roles.'}
                 </HelperTextItem>
               </HelperText>
             </FormHelperText>
@@ -281,6 +323,19 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
           </div>
         </Form>
       ) : null}
+      {applicationError ? (
+        <Alert variant="danger" isInline title="Could not update OIDC applications">
+          {applicationError}
+        </Alert>
+      ) : null}
+      <HelperText>
+        <HelperTextItem>
+          Console login stays on nova-ai-admin and nova-ai-developer. An instance role such as
+          nova-ai-jupyterhub.team-a lists only nova-ai-jupyterhub-team-a. Groups
+          nova-ai-jupyterhub.team-a.admins and .developers bind to it. MLflow and Airflow also
+          have a .viewers group. The client must already exist in StarVault.
+        </HelperTextItem>
+      </HelperText>
       {roles.length === 0 ? (
         <EmptyState headingLevel="h2" titleText="No AI platform roles">
           <EmptyStateBody>
@@ -301,16 +356,63 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
           </Thead>
           <Tbody>
             {roles.map((role) => {
-              const access = kubernetesAccessFromRole(role);
               return (
                 <Tr key={role.metadata.name}>
                   <Td dataLabel="Name">{role.metadata.name}</Td>
-                  <Td dataLabel="Console access">
-                    {access === 'none' ? '—' : KUBERNETES_ACCESS_PRESETS[access].title}
-                  </Td>
+                  <Td dataLabel="Console access">{consoleAccessTitle(role)}</Td>
                   <Td dataLabel="Console services">{formatServices(servicesFromRole(role))}</Td>
                   <Td dataLabel="OIDC applications">
-                    {formatList(role.spec?.oidc?.applications ?? [])}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                        {(role.spec?.oidc?.applications ?? []).map((application) => (
+                            <Label
+                              key={application}
+                              color={application === CONSOLE_OIDC_APPLICATION ? 'blue' : 'grey'}
+                              onClose={
+                                application === CONSOLE_OIDC_APPLICATION
+                                  ? undefined
+                                  : () => {
+                                      void saveApplications(
+                                        role,
+                                        (role.spec?.oidc?.applications ?? []).filter(
+                                          (item) => item !== application,
+                                        ),
+                                      );
+                                    }
+                              }
+                            >
+                              {application}
+                            </Label>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <TextInput
+                          aria-label={`OIDC application for ${role.metadata.name}`}
+                          placeholder="nova-ai-mlflow-team-a"
+                          value={applicationDrafts[role.metadata.name] ?? ''}
+                          onChange={(_event, value) =>
+                            setApplicationDrafts((drafts) => ({
+                              ...drafts,
+                              [role.metadata.name]: value,
+                            }))
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              addApplication(role);
+                            }
+                          }}
+                        />
+                        <Button
+                          variant="secondary"
+                          isDisabled={savingRole === role.metadata.name}
+                          isLoading={savingRole === role.metadata.name}
+                          onClick={() => addApplication(role)}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    </div>
                   </Td>
                   <Td dataLabel="Phase">{role.status?.phase ?? '—'}</Td>
                   <Td dataLabel="Bound here">

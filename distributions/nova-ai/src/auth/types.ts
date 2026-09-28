@@ -1,6 +1,6 @@
 import type { K8sObjectMeta } from '../cluster/types';
 
-export type ConsoleRole = 'none' | 'viewer' | 'contributor' | 'admin';
+export type ConsoleRole = 'none' | 'contributor' | 'admin';
 
 export type OidcConfig = {
   issuer: string;
@@ -114,8 +114,20 @@ export type ProjectAccess = {
   role: ConsoleRole;
   canView: boolean;
   canEdit: boolean;
+  canEditDeployments: boolean;
   canManageRbac: boolean;
   services: string[];
+};
+
+export type RbacPolicyRule = {
+  apiGroups?: string[];
+  resources?: string[];
+  verbs?: string[];
+};
+
+export type RbacClusterRole = {
+  metadata?: { name?: string; labels?: Record<string, string> };
+  rules?: RbacPolicyRule[];
 };
 
 export type AccessSource = 'bootstrap' | 'oidc' | 'unavailable';
@@ -124,6 +136,7 @@ export type PlatformAccess = {
   source: AccessSource;
   consoleRole: ConsoleRole;
   canCreateProjects: boolean;
+  canEditKserveCluster: boolean;
   username?: string;
   services: string[];
   visibleProjects: string[];

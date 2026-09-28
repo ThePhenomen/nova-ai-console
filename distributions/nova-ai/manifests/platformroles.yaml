@@ -1,3 +1,9 @@
+# Experiments, Workbench and Pipelines follow OIDC groups
+# nova-ai-mlflow|airflow.<namespace>.admins|developers|viewers.
+# nova-ai-jupyterhub.<namespace>.admins|developers. JupyterHub has no viewers group.
+# One project instance is one PlatformRole nova-ai-<component>.<namespace> and one client
+# nova-ai-<component>-<namespace>. Every group of that instance binds to that role.
+# Deployments follows a ClusterRole rule on serving.kserve.io.
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRole
 metadata:
@@ -5,14 +11,9 @@ metadata:
   labels:
     nova-ai.io/console: nova-ai-console
     nova-ai.io/console-persona: admin
-    nova-ai.io/experiments-enabled: "true"
-    nova-ai.io/workbench-enabled: "true"
-    nova-ai.io/deployments-enabled: "true"
 spec:
   kubernetes:
     clusterRoleSelectors:
-      - matchLabels:
-          nova-ai.io/aggregate-to-developer: "true"
       - matchLabels:
           nova-ai.io/aggregate-to-admin: "true"
   oidc:
@@ -27,8 +28,6 @@ metadata:
   name: nova-ai-developer
   labels:
     nova-ai.io/console: nova-ai-console
-    nova-ai.io/experiments-enabled: "true"
-    nova-ai.io/workbench-enabled: "true"
 spec:
   kubernetes:
     clusterRoleSelectors:
@@ -38,56 +37,75 @@ spec:
     applications:
       - nova-ai-console
 ---
-# Read-only counterpart of nova-ai-developer.
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRole
 metadata:
-  name: nova-ai-viewer
+  name: nova-ai-kserve-admin
   labels:
     nova-ai.io/console: nova-ai-console
-    nova-ai.io/experiments-enabled: "true"
-    nova-ai.io/workbench-enabled: "true"
 spec:
   kubernetes:
     clusterRoleSelectors:
       - matchLabels:
-          nova-ai.io/aggregate-to-viewer: "true"
-  oidc:
-    applications:
-      - nova-ai-console
+          nova-ai.io/aggregate-to-kserve-admin: "true"
 ---
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRole
 metadata:
-  name: nova-ai-mlflow
+  name: nova-ai-kserve-developer
   labels:
     nova-ai.io/console: nova-ai-console
-    nova-ai.io/experiments-enabled: "true"
 spec:
-  oidc:
-    applications:
-      - nova-ai-console
+  kubernetes:
+    clusterRoleSelectors:
+      - matchLabels:
+          nova-ai.io/aggregate-to-kserve-developer: "true"
 ---
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRole
 metadata:
-  name: nova-ai-workbench
+  name: nova-ai-kserve-viewer
   labels:
     nova-ai.io/console: nova-ai-console
-    nova-ai.io/workbench-enabled: "true"
 spec:
-  oidc:
-    applications:
-      - nova-ai-console
+  kubernetes:
+    clusterRoleSelectors:
+      - matchLabels:
+          nova-ai.io/aggregate-to-kserve-viewer: "true"
 ---
+# One OIDC client per component instance. Level groups bind to this role:
+# nova-ai-mlflow.team-a.admins, nova-ai-mlflow.team-a.developers, nova-ai-mlflow.team-a.viewers.
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRole
 metadata:
-  name: nova-ai-deployments
+  name: nova-ai-mlflow.team-a
   labels:
     nova-ai.io/console: nova-ai-console
-    nova-ai.io/deployments-enabled: "true"
 spec:
   oidc:
     applications:
-      - nova-ai-console
+      - nova-ai-mlflow-team-a
+---
+# nova-ai-airflow.team-a.admins, nova-ai-airflow.team-a.developers, nova-ai-airflow.team-a.viewers.
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRole
+metadata:
+  name: nova-ai-airflow.team-a
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  oidc:
+    applications:
+      - nova-ai-airflow-team-a
+---
+# nova-ai-jupyterhub.team-a.admins, nova-ai-jupyterhub.team-a.developers. No viewers group.
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRole
+metadata:
+  name: nova-ai-jupyterhub.team-a
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  oidc:
+    applications:
+      - nova-ai-jupyterhub-team-a

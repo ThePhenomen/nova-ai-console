@@ -19,6 +19,7 @@ import {
   listPlatformRoleBindings,
   listPlatformRoles,
   listPlatformUsers,
+  listClusterRoles,
 } from './platformApi';
 import type { AuthSession } from './types';
 import { useAuthSession } from './useAuthSession';
@@ -50,11 +51,12 @@ const loadPlatformAccess = async (session: AuthSession, cacheKey: string): Promi
       cacheKey,
     });
     try {
-      const [roles, bindings, platformUsers, platformGroups] = await Promise.all([
+      const [roles, bindings, platformUsers, platformGroups, clusterRoles] = await Promise.all([
         listPlatformRoles(),
         listPlatformRoleBindings(),
         listPlatformUsers().catch((): [] => []),
         listPlatformGroups().catch((): [] => []),
+        listClusterRoles().catch((): [] => []),
       ]);
       const latest = getPlatformAccessSnapshot();
       if (latest.cacheKey !== cacheKey) {
@@ -62,7 +64,7 @@ const loadPlatformAccess = async (session: AuthSession, cacheKey: string): Promi
       }
       const user = enrichUserFromPlatformDirectory(session.user, platformUsers, platformGroups);
       setPlatformAccessSnapshot({
-        access: computePlatformAccess({ user, roles, bindings }),
+        access: computePlatformAccess({ user, roles, bindings, clusterRoles }),
         error: null,
         isLoading: false,
         cacheKey,

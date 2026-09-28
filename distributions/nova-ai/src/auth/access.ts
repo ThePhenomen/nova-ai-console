@@ -9,21 +9,59 @@ import type {
   PlatformRoleKind,
   PlatformUserKind,
   ProjectAccess,
+  RbacClusterRole,
 } from './types';
 
 export const CONSOLE_SERVICE_LABEL = 'nova-ai.io/console-service';
 export const CONSOLE_SERVICE_ENABLED = /^nova-ai\.io\/(.+)-enabled$/;
 export const CONSOLE_PERSONA_LABEL = 'nova-ai.io/console-persona';
 export const CONSOLE_OIDC_APPLICATION = 'nova-ai-console';
+export const OIDC_APPLICATION_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
+/** Console login stays first. Extra names are project OIDC clients. */
+export const oidcApplicationsWithConsole = (applications: string[]): string[] => {
+  const extras = [
+    ...new Set(
+      applications
+        .map((value) => value.trim())
+        .filter((value) => value !== '' && value !== CONSOLE_OIDC_APPLICATION),
+    ),
+  ];
+  return [CONSOLE_OIDC_APPLICATION, ...extras];
+};
 export const ADMIN_AGGREGATE_LABEL = 'nova-ai.io/aggregate-to-admin';
 export const CONTRIBUTOR_AGGREGATE_LABEL = 'nova-ai.io/aggregate-to-developer';
-export const VIEWER_AGGREGATE_LABEL = 'nova-ai.io/aggregate-to-viewer';
+export const COMPONENT_AGGREGATE_LABEL = 'nova-ai.io/aggregate-to-component';
+
+const COMPONENT_INSTANCE = /^nova-ai-(mlflow|airflow|jupyterhub)\.(.+)$/i;
+
+/** nova-ai-jupyterhub.team-a → team-a. The OIDC client is nova-ai-jupyterhub-team-a. */
+export const componentInstanceNamespace = (roleName: string): string | undefined => {
+  const namespace = roleName.trim().match(COMPONENT_INSTANCE)?.[2]?.trim();
+  return namespace || undefined;
+};
+
+export const componentOidcApplication = (roleName: string): string =>
+  roleName.trim().toLowerCase().replace(/\./g, '-');
+
+export const bindingAppliesToProject = (
+  binding: PlatformRoleBindingKind,
+  projectName: string,
+): boolean => {
+  const target = binding.status?.appliedTarget?.target ?? binding.spec.kubernetes?.target ?? 'None';
+  const namespaces =
+    binding.status?.appliedTarget?.namespaces ?? binding.spec.kubernetes?.namespaces ?? [];
+  if (target === 'Cluster' || (target === 'Namespaces' && namespaces.includes(projectName))) {
+    return true;
+  }
+  return componentInstanceNamespace(binding.spec.platformRoleRef.name)?.toLowerCase() ===
+    projectName.toLowerCase();
+};
 
 const ROLE_RANK: Record<ConsoleRole, number> = {
   none: 0,
-  viewer: 1,
-  contributor: 2,
-  admin: 3,
+  contributor: 1,
+  admin: 2,
 };
 
 const OIDC_AUTH_PREFIX = 'oidc-auth-';
@@ -210,7 +248,7 @@ const selectorHas = (role: PlatformRoleKind, label: string): boolean =>
     (selector) => selector.matchLabels?.[label] === 'true',
   );
 
-export type KubernetesAccessLevel = 'admin' | 'developer' | 'viewer' | 'none';
+export type KubernetesAccessLevel = 'admin' | 'developer' | 'none';
 
 export const KUBERNETES_ACCESS_PRESETS: Record<
   Exclude<KubernetesAccessLevel, 'none'>,
@@ -225,10 +263,6 @@ export const KUBERNETES_ACCESS_PRESETS: Record<
     title: 'Developer',
     selectors: [CONTRIBUTOR_AGGREGATE_LABEL],
   },
-  viewer: {
-    title: 'Viewer',
-    selectors: [VIEWER_AGGREGATE_LABEL],
-  },
 };
 
 export const roleGrantsAdmin = (role: PlatformRoleKind): boolean =>
@@ -241,20 +275,12 @@ export const roleGrantsContributor = (role: PlatformRoleKind): boolean =>
     role.metadata.name === 'nova-ai-developer' ||
     selectorHas(role, CONTRIBUTOR_AGGREGATE_LABEL));
 
-export const roleGrantsViewer = (role: PlatformRoleKind): boolean =>
-  !roleGrantsAdmin(role) &&
-  !roleGrantsContributor(role) &&
-  (role.metadata.name === 'nova-ai-viewer' || selectorHas(role, VIEWER_AGGREGATE_LABEL));
-
 export const consoleRoleFromPlatformRole = (role: PlatformRoleKind): ConsoleRole => {
   if (roleGrantsAdmin(role)) {
     return 'admin';
   }
   if (roleGrantsContributor(role)) {
     return 'contributor';
-  }
-  if (roleGrantsViewer(role)) {
-    return 'viewer';
   }
   return 'none';
 };
@@ -266,10 +292,78 @@ export const kubernetesAccessFromRole = (role: PlatformRoleKind): KubernetesAcce
   if (roleGrantsContributor(role)) {
     return 'developer';
   }
-  if (roleGrantsViewer(role)) {
-    return 'viewer';
-  }
   return 'none';
+};
+
+/** One role per project OIDC client. The level is the bound group name. */
+export const roleIsOidcClient = (role: PlatformRoleKind): boolean =>
+  kubernetesAccessFromRole(role) === 'none' &&
+  (selectorHas(role, COMPONENT_AGGREGATE_LABEL) ||
+    componentInstanceNamespace(role.metadata.name) !== undefined);
+
+export const normalizeConsoleService = (service: string): string =>
+  service.trim().toLowerCase().replace(/\s+/g, '-');
+
+const SERVICE_ALIASES: Record<string, string> = {
+  mlflow: 'experiments',
+  experiment: 'experiments',
+  workbenches: 'workbench',
+  notebook: 'workbench',
+  notebooks: 'workbench',
+  jupyterhub: 'workbench',
+  kserve: 'deployments',
+  deployment: 'deployments',
+  models: 'deployments',
+  pipeline: 'pipelines',
+  airflow: 'pipelines',
+};
+
+export const canonicalConsoleService = (service: string): string => {
+  const normalized = normalizeConsoleService(service);
+  return SERVICE_ALIASES[normalized] ?? normalized;
+};
+
+/** Tabs whose visibility comes from OIDC groups, not PlatformRole labels. */
+const GROUP_GATED_SERVICES = new Set(['experiments', 'workbench', 'pipelines', 'deployments']);
+
+const isGroupGatedService = (service: string): boolean =>
+  GROUP_GATED_SERVICES.has(canonicalConsoleService(service));
+
+const COMPONENT_GROUP =
+  /^nova-ai-(mlflow|airflow|jupyterhub)\.(.+)\.(admins|developers|viewers)$/i;
+
+const COMPONENT_SERVICE: Record<string, string> = {
+  mlflow: 'experiments',
+  airflow: 'pipelines',
+  jupyterhub: 'workbench',
+};
+
+/**
+ * nova-ai-mlflow|airflow.<namespace>.admins|developers|viewers → that project's tab.
+ * nova-ai-jupyterhub.<namespace>.admins|developers → Workbench. viewers does not open it.
+ * Deployments is not a group: it follows ClusterRole rules on serving.kserve.io.
+ * The level is the last segment so a namespace may contain dots.
+ */
+export const componentServicesByNamespace = (groups: string[]): Map<string, string[]> => {
+  const byNamespace = new Map<string, string[]>();
+  groups.forEach((group) => {
+    const match = identityTail(group).trim().match(COMPONENT_GROUP);
+    if (!match) {
+      return;
+    }
+    const product = match[1].toLowerCase();
+    const level = match[3].toLowerCase();
+    if (product === 'jupyterhub' && level === 'viewers') {
+      return;
+    }
+    const service = COMPONENT_SERVICE[product];
+    const namespace = match[2].toLowerCase();
+    if (!service || namespace === '') {
+      return;
+    }
+    byNamespace.set(namespace, unique([...(byNamespace.get(namespace) ?? []), service]));
+  });
+  return byNamespace;
 };
 
 export const servicesFromRole = (role: PlatformRoleKind): string[] => {
@@ -283,8 +377,10 @@ export const servicesFromRole = (role: PlatformRoleKind): string[] => {
   });
   const legacy = labels[CONSOLE_SERVICE_LABEL];
   const fromLegacy = legacy && !legacy.includes(',') ? [legacy] : [];
-  const named = unique([...fromEnabled, ...fromLegacy]);
-  if (named.length > 0) {
+  const named = unique([...fromEnabled, ...fromLegacy]).filter(
+    (service) => !isGroupGatedService(service),
+  );
+  if (named.length > 0 || fromEnabled.length > 0 || fromLegacy.length > 0) {
     return named;
   }
   const applications = role.spec?.oidc?.applications ?? [];
@@ -292,32 +388,39 @@ export const servicesFromRole = (role: PlatformRoleKind): string[] => {
     applications
       .filter((application) => application.startsWith(OIDC_AUTH_PREFIX))
       .map((application) => application.slice(OIDC_AUTH_PREFIX.length)),
-  );
+  ).filter((service) => !isGroupGatedService(service));
 };
 
 const emptyProjectAccess = (): ProjectAccess => ({
   role: 'none',
   canView: false,
   canEdit: false,
+  canEditDeployments: false,
   canManageRbac: false,
   services: [],
 });
 
-const projectAccessFrom = (role: ConsoleRole, services: string[]): ProjectAccess => ({
+const projectAccessFrom = (
+  role: ConsoleRole,
+  services: string[],
+  canEditDeployments = false,
+): ProjectAccess => ({
   role,
-  canView: role !== 'none',
+  canView: role !== 'none' || services.length > 0,
   canEdit: role === 'contributor' || role === 'admin',
+  canEditDeployments,
   canManageRbac: role === 'admin',
   services: unique(services),
 });
 
 export const bootstrapAccess = (username?: string): PlatformAccess => {
   const services = [...CONSOLE_NAV_SERVICE_TITLES, PIPELINES_SERVICE];
-  const project = projectAccessFrom('admin', services);
+  const project = projectAccessFrom('admin', services, true);
   return {
     source: 'bootstrap',
     consoleRole: 'admin',
     canCreateProjects: true,
+    canEditKserveCluster: true,
     username,
     services,
     visibleProjects: [],
@@ -330,6 +433,7 @@ export const emptyAccess = (source: PlatformAccess['source'], username?: string)
   source,
   consoleRole: 'none',
   canCreateProjects: false,
+  canEditKserveCluster: false,
   username,
   services: [],
   visibleProjects: [],
@@ -341,22 +445,101 @@ export type AccessInput = {
   user: AuthUser;
   roles: PlatformRoleKind[];
   bindings: PlatformRoleBindingKind[];
+  clusterRoles?: RbacClusterRole[];
+};
+
+const KSERVE_API_GROUP = 'serving.kserve.io';
+const KSERVE_CLUSTER_RESOURCES = new Set([
+  'clusterservingruntimes',
+  'clusterstoragecontainers',
+  'localmodelnodegroups',
+  'localmodelcaches',
+]);
+const READ_VERBS = new Set(['*', 'get', 'list', 'watch']);
+const WRITE_VERBS = new Set(['*', 'create', 'update', 'patch', 'delete']);
+
+type KserveGrant = { read: boolean; writeNamespaced: boolean; writeCluster: boolean };
+
+const emptyKserveGrant = (): KserveGrant => ({
+  read: false,
+  writeNamespaced: false,
+  writeCluster: false,
+});
+
+const kserveGrantFromRules = (
+  rules: RbacClusterRole['rules'],
+  scope: 'cluster' | 'namespace',
+): KserveGrant => {
+  const grant = emptyKserveGrant();
+  (rules ?? []).forEach((rule) => {
+    const groups = rule.apiGroups ?? [];
+    if (!groups.some((group) => group === '*' || group === KSERVE_API_GROUP)) {
+      return;
+    }
+    const canRead = (rule.verbs ?? []).some((verb) => READ_VERBS.has(verb));
+    const canWrite = (rule.verbs ?? []).some((verb) => WRITE_VERBS.has(verb));
+    (rule.resources ?? []).forEach((resource) => {
+      const namespaced = resource === '*' || !KSERVE_CLUSTER_RESOURCES.has(resource);
+      const clusterScoped = resource === '*' || KSERVE_CLUSTER_RESOURCES.has(resource);
+      if (namespaced && canRead) {
+        grant.read = true;
+      }
+      if (namespaced && canWrite) {
+        grant.writeNamespaced = true;
+      }
+      if (scope === 'cluster' && clusterScoped && canWrite) {
+        grant.writeCluster = true;
+      }
+    });
+  });
+  return grant;
+};
+
+const kserveGrantForRole = (
+  role: PlatformRoleKind,
+  clusterRoles: RbacClusterRole[],
+  scope: 'cluster' | 'namespace',
+): KserveGrant => {
+  const selectors = role.spec?.kubernetes?.clusterRoleSelectors ?? [];
+  return clusterRoles.reduce((grant, clusterRole) => {
+    const labels = clusterRole.metadata?.labels ?? {};
+    const matches = selectors.some((selector) =>
+      Object.entries(selector.matchLabels ?? {}).every(([key, value]) => labels[key] === value),
+    );
+    if (!matches) {
+      return grant;
+    }
+    const next = kserveGrantFromRules(clusterRole.rules, scope);
+    return {
+      read: grant.read || next.read,
+      writeNamespaced: grant.writeNamespaced || next.writeNamespaced,
+      writeCluster: grant.writeCluster || next.writeCluster,
+    };
+  }, emptyKserveGrant());
 };
 
 /**
- * UI admin vs contributor vs viewer comes from kubernetes aggregation plus
- * `nova-ai.io/console-persona: admin`. Extra sidebar and project tabs come from
- * nova-ai.io/<tab>-enabled: "true" (for example nova-ai.io/experiments-enabled),
- * and kubernetes.target still decides which namespaces are listed.
+ * UI admin vs contributor comes from kubernetes aggregation plus
+ * `nova-ai.io/console-persona: admin`. Experiments, Workbench and Pipelines come
+ * from OIDC groups nova-ai-mlflow|airflow.<namespace>.admins|developers|viewers and
+ * nova-ai-jupyterhub.<namespace>.admins|developers.
+ * Deployments comes from ClusterRole rules on serving.kserve.io, scoped by the
+ * binding target. kubernetes.target still decides which namespaces are listed.
  */
 export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
   const rolesByName = new Map(input.roles.map((role) => [role.metadata.name, role]));
+  const clusterRoles = input.clusterRoles ?? [];
   let consoleRole: ConsoleRole = 'none';
   const clusterServices: string[] = [];
   const projectRoles = new Map<string, ConsoleRole>();
   const projectServices = new Map<string, string[]>();
+  const deploymentWriters = new Set<string>();
   const visibleProjects = new Set<string>();
   let seesAllProjects = false;
+  let clusterDeploymentRead = false;
+  let clusterDeploymentWrite = false;
+  let canEditKserveCluster = false;
+  const componentServices = componentServicesByNamespace(input.user.groups);
 
   for (const binding of input.bindings) {
     if (!bindingMatchesUser(binding, input.user)) {
@@ -372,19 +555,43 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
       binding.status?.appliedTarget?.target ?? binding.spec.kubernetes?.target ?? 'None';
     const namespaces =
       binding.status?.appliedTarget?.namespaces ?? binding.spec.kubernetes?.namespaces ?? [];
+    const namespacedKserve = kserveGrantForRole(role, clusterRoles, 'namespace');
+    const clusterKserve = kserveGrantForRole(role, clusterRoles, 'cluster');
+    const kserve = target === 'Cluster' ? clusterKserve : namespacedKserve;
+    if (clusterKserve.writeCluster) {
+      canEditKserveCluster = true;
+    }
 
-    consoleRole = maxRole(consoleRole, boundRole === 'none' ? 'contributor' : boundRole);
+    if (boundRole !== 'none') {
+      consoleRole = maxRole(consoleRole, boundRole);
+    }
 
     if (target === 'Namespaces') {
       namespaces.forEach((namespace) => {
         visibleProjects.add(namespace);
         projectRoles.set(namespace, maxRole(projectRoles.get(namespace) ?? 'none', boundRole));
+        const namespaceServices = [...services];
+        if (kserve.read) {
+          namespaceServices.push('deployments');
+        }
+        if (kserve.writeNamespaced) {
+          deploymentWriters.add(namespace.toLowerCase());
+        }
         projectServices.set(
           namespace,
-          unique([...(projectServices.get(namespace) ?? []), ...services]),
+          unique([...(projectServices.get(namespace) ?? []), ...namespaceServices]),
         );
       });
       continue;
+    }
+
+    if (target === 'Cluster') {
+      if (kserve.read) {
+        clusterDeploymentRead = true;
+      }
+      if (kserve.writeNamespaced) {
+        clusterDeploymentWrite = true;
+      }
     }
 
     clusterServices.push(...services);
@@ -394,15 +601,31 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
     seesAllProjects = true;
   }
 
+  componentServices.forEach((_services, namespace) => {
+    visibleProjects.add(namespace);
+  });
+
+  const visibleLower = new Set([...visibleProjects].map((namespace) => namespace.toLowerCase()));
+  const componentServicesInView = [...componentServices.entries()].flatMap(([namespace, services]) =>
+    seesAllProjects || visibleLower.has(namespace) ? services : [],
+  );
+  const deploymentService = clusterDeploymentRead || deploymentWriters.size > 0 ||
+    [...projectServices.values()].some((services) => services.includes('deployments'))
+    ? ['deployments']
+    : [];
+
   const grantedServices = unique([
     ...clusterServices,
     ...[...projectServices.values()].flat(),
+    ...componentServicesInView,
+    ...deploymentService,
   ]);
 
   return {
     source: 'oidc',
     consoleRole,
     canCreateProjects: consoleRole === 'admin',
+    canEditKserveCluster,
     username: input.user.username,
     services: grantedServices,
     visibleProjects: [...visibleProjects].toSorted(),
@@ -417,33 +640,17 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
       }
       const services = unique([
         ...clusterServices,
+        ...(clusterDeploymentRead ? ['deployments'] : []),
         ...(projectServices.get(projectName) ?? []),
+        ...(componentServices.get(projectName.toLowerCase()) ?? []),
       ]);
-      const effective: ConsoleRole = role === 'none' ? 'contributor' : role;
-      return projectAccessFrom(effective, services);
+      const canEditDeployments =
+        clusterDeploymentWrite || deploymentWriters.has(projectName.toLowerCase());
+      return projectAccessFrom(role, services, canEditDeployments);
     },
     canViewProject: (projectName: string) =>
       seesAllProjects || visibleProjects.has(projectName),
   };
-};
-
-export const normalizeConsoleService = (service: string): string =>
-  service.trim().toLowerCase().replace(/\s+/g, '-');
-
-const SERVICE_ALIASES: Record<string, string> = {
-  mlflow: 'experiments',
-  experiment: 'experiments',
-  workbenches: 'workbench',
-  notebook: 'workbench',
-  notebooks: 'workbench',
-  deployment: 'deployments',
-  models: 'deployments',
-  pipeline: 'pipelines',
-};
-
-export const canonicalConsoleService = (service: string): string => {
-  const normalized = normalizeConsoleService(service);
-  return SERVICE_ALIASES[normalized] ?? normalized;
 };
 
 export const hasProjectService = (access: ProjectAccess, service: string): boolean =>

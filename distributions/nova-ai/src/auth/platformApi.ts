@@ -6,6 +6,7 @@ import type {
   PlatformRoleBindingKind,
   PlatformRoleKind,
   PlatformUserKind,
+  RbacClusterRole,
 } from './types';
 
 export const PLATFORM_AUTH_API = '/apis/auth.nova-platform.io/v1alpha1';
@@ -26,11 +27,30 @@ export const listPlatformRoleBindings = (): Promise<PlatformRoleBindingKind[]> =
     `${PLATFORM_AUTH_API}/platformrolebindings`,
   ).then((list) => list.items);
 
+export const listClusterRoles = (): Promise<RbacClusterRole[]> =>
+  k8sRequest<K8sList<RbacClusterRole>>('/apis/rbac.authorization.k8s.io/v1/clusterroles').then(
+    (list) => list.items,
+  );
+
 export const createPlatformRole = (role: PlatformRoleKind): Promise<PlatformRoleKind> =>
   k8sRequest<PlatformRoleKind>(`${PLATFORM_AUTH_API}/platformroles`, {
     method: 'POST',
     body: role,
   });
+
+export const updatePlatformRole = (role: PlatformRoleKind): Promise<PlatformRoleKind> =>
+  k8sRequest<PlatformRoleKind>(
+    `${PLATFORM_AUTH_API}/platformroles/${encodeURIComponent(role.metadata.name)}`,
+    {
+      method: 'PUT',
+      body: {
+        apiVersion: role.apiVersion,
+        kind: role.kind,
+        metadata: role.metadata,
+        spec: role.spec,
+      },
+    },
+  );
 
 export const createPlatformRoleBinding = (
   binding: PlatformRoleBindingKind,

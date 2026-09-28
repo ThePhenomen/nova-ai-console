@@ -2,7 +2,6 @@ import { cloneResource } from '../../deployments/manifest';
 import {
   PRE_INSTALLED_LABEL,
   PROTOCOL_VERSIONS,
-  type KServeSettingsKind,
   type KServeSettingsResource,
   type SettingsKindCatalog,
 } from './catalog';
@@ -778,13 +777,6 @@ export const uriFormatSummary = (resource: KServeSettingsResource): string => {
     })
     .filter(Boolean)
     .join(', ') || '—';
-};
-
-export const canEditSettingsKind = (kind: KServeSettingsKind, consoleRole: string): boolean => {
-  if (kind === 'ServingRuntime') {
-    return consoleRole === 'admin' || consoleRole === 'contributor';
-  }
-  return consoleRole === 'admin';
 };
 
 export const isPreInstalled = (resource: KServeSettingsResource): boolean =>
