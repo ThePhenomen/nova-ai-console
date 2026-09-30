@@ -1,7 +1,7 @@
 import React from 'react';
 import { FormSelect, FormSelectOption, Spinner } from '@patternfly/react-core';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { hasProjectService } from '../../auth/access';
+import { canShowKserveSettings, hasProjectService } from '../../auth/access';
 import { usePlatformAccess } from '../../auth/usePlatformAccess';
 import { useClusterConnection } from '../../cluster/useClusterConnection';
 import { listProjects } from './projectApi';
@@ -84,12 +84,13 @@ const ProjectSwitcher: React.FC = () => {
     if (!selected) {
       return;
     }
-    const hidden = PAGE_SERVICES.find(
+    const onSettings = location.pathname === '/settings' || location.pathname.startsWith('/settings/');
+    const hiddenService = PAGE_SERVICES.find(
       (item) =>
         (location.pathname === item.prefix || location.pathname.startsWith(`${item.prefix}/`)) &&
         !hasProjectService(access.forProject(selected), item.service),
     );
-    if (hidden) {
+    if (hiddenService || (onSettings && !canShowKserveSettings(access, selected))) {
       navigate(`/projects/${encodeURIComponent(selected)}/overview`, { replace: true });
     }
   }, [access, location.pathname, navigate, selected]);

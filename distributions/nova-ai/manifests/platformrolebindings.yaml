@@ -1,13 +1,14 @@
-# Console and Deployments follow ClusterRole rules, limited by kubernetes.target.
-# target: Cluster on nova-ai-admin lists every project and allows creating projects.
-# target: Namespaces on nova-ai-kserve-* opens Deployments in ml-team.
-# Login still needs a binding to nova-ai-admin or nova-ai-developer, because
-# those roles carry the nova-ai-console OIDC application.
+# Bindings for project ml-team. Each group is paired with the roles it can hold.
+# Console admin is cluster-wide. Console developer is limited to ml-team.
+# KServe namespace edit/view stays in ml-team. Cluster edit and cluster view
+# use target Cluster and do not grant InferenceService in other projects.
+# MLflow, Airflow and JupyterHub groups share one OIDC role per component.
+# JupyterHub has no viewers group.
 ---
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRoleBinding
 metadata:
-  name: nova-ai-console-ml-team-admins
+  name: nova-ai-console-admins
   labels:
     nova-ai.io/console: nova-ai-console
 spec:
@@ -15,7 +16,7 @@ spec:
     name: nova-ai-admin
   subjects:
     - kind: Group
-      name: nova-ai-console.ml-team.admins
+      name: nova-ai-console.admins
   kubernetes:
     target: Cluster
 ---
@@ -39,12 +40,27 @@ spec:
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRoleBinding
 metadata:
-  name: nova-ai-kserve-ml-team-admins
+  name: nova-ai-kserve-ml-team-admins-cluster-edit
   labels:
     nova-ai.io/console: nova-ai-console
 spec:
   platformRoleRef:
-    name: nova-ai-kserve-admin
+    name: nova-ai-kserve.cluster-edit
+  subjects:
+    - kind: Group
+      name: nova-ai-kserve.ml-team.admins
+  kubernetes:
+    target: Cluster
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-kserve-ml-team-admins-edit
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-kserve.ml-team.edit
   subjects:
     - kind: Group
       name: nova-ai-kserve.ml-team.admins
@@ -56,12 +72,12 @@ spec:
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRoleBinding
 metadata:
-  name: nova-ai-kserve-ml-team-developers
+  name: nova-ai-kserve-ml-team-developers-edit
   labels:
     nova-ai.io/console: nova-ai-console
 spec:
   platformRoleRef:
-    name: nova-ai-kserve-developer
+    name: nova-ai-kserve.ml-team.edit
   subjects:
     - kind: Group
       name: nova-ai-kserve.ml-team.developers
@@ -73,12 +89,27 @@ spec:
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRoleBinding
 metadata:
-  name: nova-ai-kserve-ml-team-viewers
+  name: nova-ai-kserve-ml-team-developers-cluster-view
   labels:
     nova-ai.io/console: nova-ai-console
 spec:
   platformRoleRef:
-    name: nova-ai-kserve-viewer
+    name: nova-ai-kserve.cluster-view
+  subjects:
+    - kind: Group
+      name: nova-ai-kserve.ml-team.developers
+  kubernetes:
+    target: Cluster
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-kserve-ml-team-viewers-view
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-kserve.ml-team.view
   subjects:
     - kind: Group
       name: nova-ai-kserve.ml-team.viewers
@@ -90,7 +121,22 @@ spec:
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRoleBinding
 metadata:
-  name: nova-ai-mlflow-ml-team
+  name: nova-ai-kserve-ml-team-viewers-cluster-view
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-kserve.cluster-view
+  subjects:
+    - kind: Group
+      name: nova-ai-kserve.ml-team.viewers
+  kubernetes:
+    target: Cluster
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-mlflow-ml-team-admins
   labels:
     nova-ai.io/console: nova-ai-console
 spec:
@@ -99,5 +145,110 @@ spec:
   subjects:
     - kind: Group
       name: nova-ai-mlflow.ml-team.admins
+  kubernetes:
+    target: None
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-mlflow-ml-team-developers
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-mlflow.ml-team
+  subjects:
+    - kind: Group
+      name: nova-ai-mlflow.ml-team.developers
+  kubernetes:
+    target: None
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-mlflow-ml-team-viewers
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-mlflow.ml-team
+  subjects:
+    - kind: Group
+      name: nova-ai-mlflow.ml-team.viewers
+  kubernetes:
+    target: None
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-airflow-ml-team-admins
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-airflow.ml-team
+  subjects:
+    - kind: Group
+      name: nova-ai-airflow.ml-team.admins
+  kubernetes:
+    target: None
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-airflow-ml-team-developers
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-airflow.ml-team
+  subjects:
+    - kind: Group
+      name: nova-ai-airflow.ml-team.developers
+  kubernetes:
+    target: None
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-airflow-ml-team-viewers
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-airflow.ml-team
+  subjects:
+    - kind: Group
+      name: nova-ai-airflow.ml-team.viewers
+  kubernetes:
+    target: None
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-jupyterhub-ml-team-admins
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-jupyterhub.ml-team
+  subjects:
+    - kind: Group
+      name: nova-ai-jupyterhub.ml-team.admins
+  kubernetes:
+    target: None
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-jupyterhub-ml-team-developers
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-jupyterhub.ml-team
+  subjects:
+    - kind: Group
+      name: nova-ai-jupyterhub.ml-team.developers
   kubernetes:
     target: None

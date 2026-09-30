@@ -203,6 +203,12 @@ const decodeJwtPayload = (token: string): Record<string, unknown> => {
   }
 };
 
+const loginScopes = (scopes?: string): string => {
+  const parts = new Set((scopes?.trim() || 'openid').split(/\s+/).filter((part) => part !== ''));
+  ['openid', 'email', 'profile', 'groups'].forEach((scope) => parts.add(scope));
+  return [...parts].join(' ');
+};
+
 const claimString = (claims: Record<string, unknown>, keys: string[]): string | undefined => {
   for (const key of keys) {
     const value = claims[key];
@@ -270,7 +276,7 @@ export const startOidcLogin = async (config: OidcConfig): Promise<void> => {
   authorizeUrl.searchParams.set('client_id', clientId);
   authorizeUrl.searchParams.set('redirect_uri', handshake.redirectUri);
   authorizeUrl.searchParams.set('response_type', 'code');
-  authorizeUrl.searchParams.set('scope', config.scopes?.trim() || 'openid');
+  authorizeUrl.searchParams.set('scope', loginScopes(config.scopes));
   authorizeUrl.searchParams.set('code_challenge', challenge);
   authorizeUrl.searchParams.set('code_challenge_method', 'S256');
   authorizeUrl.searchParams.set('state', handshake.state);

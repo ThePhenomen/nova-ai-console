@@ -128,6 +128,10 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
     }
     const selected = roles.find((role) => role.metadata.name === roleName);
     const hasKubernetes = (selected?.spec?.kubernetes?.clusterRoleSelectors?.length ?? 0) > 0;
+    const kubernetesTarget =
+      selected?.metadata.labels?.['nova-ai.io/kubernetes-target'] === 'Cluster'
+        ? 'Cluster'
+        : 'Namespaces';
     setIsSaving(true);
     try {
       await createPlatformRoleBinding({
@@ -144,8 +148,10 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
           platformRoleRef: { name: roleName },
           subjects: [{ kind: subjectKind, name }],
           ...(hasKubernetes
-            ? { kubernetes: { target: 'Namespaces', namespaces: [projectName] } }
-            : { kubernetes: { target: 'None' } }),
+            ? kubernetesTarget === 'Cluster'
+              ? { kubernetes: { target: 'Cluster' as const } }
+              : { kubernetes: { target: 'Namespaces' as const, namespaces: [projectName] } }
+            : { kubernetes: { target: 'None' as const } }),
         },
       });
       setSubjectName('');

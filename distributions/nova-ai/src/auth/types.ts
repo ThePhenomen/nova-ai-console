@@ -136,6 +136,7 @@ export type PlatformAccess = {
   source: AccessSource;
   consoleRole: ConsoleRole;
   canCreateProjects: boolean;
+  canViewKserveCluster: boolean;
   canEditKserveCluster: boolean;
   username?: string;
   services: string[];

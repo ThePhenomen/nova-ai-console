@@ -10,7 +10,7 @@ const SESSION_PATH = '/k8s-session';
 const OIDC_FORWARD_PATH = '/oidc-forward';
 const OIDC_PKCE_PATH = '/oidc-pkce';
 
-/** @type {Map<string, { apiServer: string, ca?: Buffer }>} */
+/** @type {Map<string, { apiServer: string, token?: string, cert?: Buffer, key?: Buffer, ca?: Buffer }>} */
 const sessions = new Map();
 
 const sendJson = (res, statusCode, body) => {
@@ -49,11 +49,31 @@ const envClusterSession = (() => {
   if (!kubeconfigFromEnv?.apiServer) {
     return null;
   }
+  const token =
+    typeof kubeconfigFromEnv.token === 'string' && kubeconfigFromEnv.token.trim() !== ''
+      ? kubeconfigFromEnv.token.trim()
+      : undefined;
+  const cert = decodePem(kubeconfigFromEnv.clientCertificateData);
+  const key = decodePem(kubeconfigFromEnv.clientKeyData);
+  const ca = decodePem(kubeconfigFromEnv.certificateAuthorityData);
+  if (!token && !(cert && key)) {
+    return null;
+  }
   return {
     apiServer: kubeconfigFromEnv.apiServer,
-    ca: decodePem(kubeconfigFromEnv.certificateAuthorityData),
+    token,
+    cert,
+    key,
+    ca,
   };
 })();
+
+if (kubeconfigFromEnv?.apiServer && !envClusterSession) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[k8s-proxy] KUBECONFIG_BASE64 has a cluster URL but no token or client-certificate-data and client-key-data.',
+  );
+}
 
 const createSession = () => {
   if (!envClusterSession) {
@@ -77,6 +97,8 @@ const requestK8s = (target, method, headers, bodyStream, tls) =>
         method,
         headers,
         rejectUnauthorized: false,
+        cert: tls.cert,
+        key: tls.key,
         ca: tls.ca,
       },
       (proxyRes) => resolve({ proxyReq, proxyRes }),
@@ -261,9 +283,11 @@ const handleOidcForward = (req, res) => {
 
 /**
  * Browser cannot speak to the API server directly, so the webpack dev server
- * forwards `/k8s-proxy/*`. Kubeconfig supplies the API address and CA.
- * Authorization is the signed-in user's verified OIDC ID token, the same way
- * nova-console sends the user bearer. The kubeconfig user is not used.
+ * forwards `/k8s-proxy/*` as the signed-in user. kube-apiserver only accepts an
+ * ID token whose audience is --oidc-client-id (oidc-kubernetes-client, the same
+ * client nova-console logs in with). This console logs in with its own client,
+ * so the proxy authenticates with the kubeconfig identity and impersonates the
+ * user the apiserver would derive: username claim sub, groups claim groups.
  */
 const k8sProxyMiddleware = (req, res, next) => {
   const url = req.url || '';
@@ -322,6 +346,9 @@ const k8sProxyMiddleware = (req, res, next) => {
   const headers = {
     accept: req.headers.accept || 'application/json',
   };
+  if (session.token) {
+    headers.authorization = `Bearer ${session.token}`;
+  }
   if (req.headers['content-type']) {
     headers['content-type'] = req.headers['content-type'];
   }
@@ -329,10 +356,10 @@ const k8sProxyMiddleware = (req, res, next) => {
     headers['content-length'] = req.headers['content-length'];
   }
 
-  const idToken = userToken.trim();
-  identityFromToken(idToken)
-    .then(() => {
-      headers.authorization = `Bearer ${idToken}`;
+  identityFromToken(userToken.trim())
+    .then((identity) => {
+      headers['Impersonate-User'] = identity.username;
+      headers['Impersonate-Group'] = identity.groups;
       return requestK8s(target, method, headers, hasBody ? req : undefined, session);
     })
     .then(({ proxyRes }) => {

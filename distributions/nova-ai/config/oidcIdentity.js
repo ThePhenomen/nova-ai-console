@@ -76,16 +76,6 @@ const decodePart = (part) => JSON.parse(Buffer.from(part, 'base64url').toString(
 
 const headerValue = (value) => String(value).replace(/[\r\n]/g, '').trim();
 
-const claimString = (claims, keys) => {
-  for (const key of keys) {
-    const value = claims[key];
-    if (typeof value === 'string' && value.trim() !== '') {
-      return value.trim();
-    }
-  }
-  return undefined;
-};
-
 const claimGroups = (claims) => {
   const raw = claims.groups ?? claims.nova_groups ?? claims['https://kubernetes.io/groups'];
   const values = typeof raw === 'string' ? [raw] : Array.isArray(raw) ? raw : [];
@@ -116,11 +106,20 @@ const verifySignature = (alg, data, signature, jwk) => {
 };
 
 /**
- * Verifies an OIDC ID token before it is forwarded to the API server as
- * Authorization: Bearer. The apiserver authenticates that token itself.
+ * Verifies an OIDC ID token and returns the Kubernetes user the apiserver
+ * would authenticate from it: --oidc-username-claim (default sub) and
+ * --oidc-groups-claim. A prefix of "-" means no prefix, matching kube-apiserver.
  * @param {string} token
  * @returns {Promise<{ username: string, groups: string[] }>}
  */
+const kubernetesUsername = (claimValue) => {
+  const prefix = process.env.K8S_OIDC_USERNAME_PREFIX ?? '-';
+  if (prefix === '' || prefix === '-') {
+    return claimValue;
+  }
+  return `${prefix}${claimValue}`;
+};
+
 const identityFromToken = async (token) => {
   const parts = token.split('.');
   if (parts.length !== 3) {
@@ -160,14 +159,16 @@ const identityFromToken = async (token) => {
     throw new Error('OIDC token audience does not match the console client.');
   }
 
-  const username = headerValue(
-    claimString(payload, ['preferred_username', 'username', 'nickname', 'name', 'email']) ||
+  const usernameClaim = process.env.K8S_OIDC_USERNAME_CLAIM || 'sub';
+  const claimValue = headerValue(
+    (typeof payload[usernameClaim] === 'string' && payload[usernameClaim]) ||
       (typeof payload.sub === 'string' ? payload.sub : ''),
   );
-  if (!username) {
+  if (!claimValue) {
     throw new Error('OIDC token has no subject.');
   }
-  return { username, groups: [...new Set(claimGroups(payload))] };
+  const groups = ['system:authenticated', ...claimGroups(payload)];
+  return { username: kubernetesUsername(claimValue), groups: [...new Set(groups)] };
 };
 
 module.exports = { identityFromToken };

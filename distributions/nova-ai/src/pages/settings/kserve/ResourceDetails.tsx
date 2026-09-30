@@ -22,7 +22,7 @@ import {
   TextArea,
 } from '@patternfly/react-core';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { usePlatformAccess } from '../../../auth/usePlatformAccess';
+import { canI } from '../../../cluster/accessReview';
 import { K8sApiError } from '../../../cluster/k8sClient';
 import { toManifest } from '../../deployments/manifest';
 import { deleteSettingsResource, getSettingsResource } from './api';
@@ -59,7 +59,7 @@ const ResourceDetails: React.FC = () => {
   const name = params.name ?? '';
   const namespace = kind.scope === 'Namespaced' ? params.namespace : undefined;
   const navigate = useNavigate();
-  const { access } = usePlatformAccess();
+  const [canUpdate, setCanUpdate] = React.useState(false);
   const [item, setItem] = React.useState<KServeSettingsResource | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -68,12 +68,21 @@ const ResourceDetails: React.FC = () => {
   const [isDeleting, setIsDeleting] = React.useState(false);
 
   const listPath = settingsListPath(kind);
-  const canEdit =
-    item !== null &&
-    !isPreInstalled(item) &&
-    (kind.scope === 'Cluster'
-      ? access.canEditKserveCluster
-      : access.forProject(namespace ?? '').canEditDeployments);
+  const canEdit = item !== null && !isPreInstalled(item) && canUpdate;
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      const allowed = await canI('update', kind.group, kind.plural, namespace);
+      if (!cancelled) {
+        setCanUpdate(allowed);
+      }
+    };
+    void check();
+    return () => {
+      cancelled = true;
+    };
+  }, [kind.group, kind.plural, namespace]);
 
   const load = React.useCallback(async () => {
     setIsLoading(true);

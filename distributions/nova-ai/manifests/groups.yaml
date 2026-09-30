@@ -1,83 +1,10 @@
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: Group
 metadata:
-  name: nova-ai-mlflow.ml-team.admins
-spec:
-  type: internal
-  members:
-    - REPLACE_WITH_USER_CR_NAME
----
-apiVersion: auth.nova-platform.io/v1alpha1
-kind: Group
-metadata:
-  name: nova-ai-mlflow.ml-team.developers
-spec:
-  type: internal
-  members:
-    - REPLACE_WITH_USER_CR_NAME
----
-apiVersion: auth.nova-platform.io/v1alpha1
-kind: Group
-metadata:
-  name: nova-ai-mlflow.ml-team.viewers
-spec:
-  type: internal
-  members:
-    - REPLACE_WITH_USER_CR_NAME
----
-apiVersion: auth.nova-platform.io/v1alpha1
-kind: Group
-metadata:
-  name: nova-ai-airflow.ml-team.admins
-spec:
-  type: internal
-  members:
-    - REPLACE_WITH_USER_CR_NAME
----
-apiVersion: auth.nova-platform.io/v1alpha1
-kind: Group
-metadata:
-  name: nova-ai-airflow.ml-team.developers
-spec:
-  type: internal
-  members:
-    - REPLACE_WITH_USER_CR_NAME
----
-apiVersion: auth.nova-platform.io/v1alpha1
-kind: Group
-metadata:
-  name: nova-ai-airflow.ml-team.viewers
-spec:
-  type: internal
-  members:
-    - REPLACE_WITH_USER_CR_NAME
----
-apiVersion: auth.nova-platform.io/v1alpha1
-kind: Group
-metadata:
-  name: nova-ai-jupyterhub.ml-team.admins
-spec:
-  type: internal
-  members:
-    - REPLACE_WITH_USER_CR_NAME
----
-apiVersion: auth.nova-platform.io/v1alpha1
-kind: Group
-metadata:
-  name: nova-ai-jupyterhub.ml-team.developers
-spec:
-  type: internal
-  members:
-    - REPLACE_WITH_USER_CR_NAME
----
-apiVersion: auth.nova-platform.io/v1alpha1
-kind: Group
-metadata:
   name: nova-ai-console.admins
 spec:
   type: internal
   members:
-    - ml-admin
 ---
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: Group
@@ -90,11 +17,74 @@ spec:
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: Group
 metadata:
-  name: nova-ai-kserve.ml-team.admins
+  name: nova-ai-mlflow.ml-team.admins
 spec:
   type: internal
   members:
-    - ml-admin
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: Group
+metadata:
+  name: nova-ai-mlflow.ml-team.developers
+spec:
+  type: internal
+  members:
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: Group
+metadata:
+  name: nova-ai-mlflow.ml-team.viewers
+spec:
+  type: internal
+  members:
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: Group
+metadata:
+  name: nova-ai-airflow.ml-team.admins
+spec:
+  type: internal
+  members: 
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: Group
+metadata:
+  name: nova-ai-airflow.ml-team.developers
+spec:
+  type: internal
+  members:
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: Group
+metadata:
+  name: nova-ai-airflow.ml-team.viewers
+spec:
+  type: internal
+  members:
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: Group
+metadata:
+  name: nova-ai-jupyterhub.ml-team.admins
+spec:
+  type: internal
+  members:
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: Group
+metadata:
+  name: nova-ai-jupyterhub.ml-team.developers
+spec:
+  type: internal
+  members:
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: Group
+metadata:
+  name: nova-ai-kserve.ml-team.admins
+spec:
+  type: internal
+  members: 
 ---
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: Group

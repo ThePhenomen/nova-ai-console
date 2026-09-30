@@ -2,7 +2,7 @@ import React from 'react';
 import { Button, Label } from '@patternfly/react-core';
 import { UserIcon } from '@patternfly/react-icons';
 import { usePluginStore } from '@nova-ai/plugin-core';
-import { hasProjectService } from './access';
+import { canShowKserveSettings, hasProjectService } from './access';
 import { CONSOLE_NAV_SERVICES } from '../consoleServices';
 import { getEnvOidcConfig } from './envOidc';
 import OidcLoginModal from './OidcLoginModal';
@@ -21,14 +21,15 @@ const AuthToolbarItem: React.FC = () => {
 
   React.useEffect(() => {
     const projectAccess = selectedProject ? access.forProject(selectedProject) : null;
-    store.setFeatureFlags(
-      Object.fromEntries(
+    store.setFeatureFlags({
+      ...Object.fromEntries(
         CONSOLE_NAV_SERVICES.map((service) => [
           service.id,
           projectAccess ? hasProjectService(projectAccess, service.title) : false,
         ]),
       ),
-    );
+      'kserve-settings': canShowKserveSettings(access, selectedProject ?? ''),
+    });
   }, [access, selectedProject, store]);
 
   const signIn = async () => {

@@ -39,6 +39,7 @@ import {
 } from '@patternfly/react-table';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { usePlatformAccess } from '../../../auth/usePlatformAccess';
+import { canI } from '../../../cluster/accessReview';
 import { K8sApiError } from '../../../cluster/k8sClient';
 import { listProjects } from '../../projects/projectApi';
 import { deleteSettingsResource, listSettingsResources } from './api';
@@ -113,24 +114,53 @@ const KServeSettings: React.FC = () => {
       ? requestedProject
       : '';
 
-  const canEditCluster = access.canEditKserveCluster;
-  const editableNamespaces = namespaces.filter(
-    (namespace) => access.forProject(namespace).canEditDeployments,
-  );
-  const canCreate =
-    kind.scope === 'Cluster'
-      ? canEditCluster
-      : selectedProject
-        ? access.forProject(selectedProject).canEditDeployments
-        : editableNamespaces.length > 0;
+  const [canCreate, setCanCreate] = React.useState(false);
+  const [canUpdateCluster, setCanUpdateCluster] = React.useState(false);
+  const [updatableNamespaces, setUpdatableNamespaces] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      if (kind.scope === 'Cluster') {
+        const [create, update] = await Promise.all([
+          canI('create', kind.group, kind.plural),
+          canI('update', kind.group, kind.plural),
+        ]);
+        if (!cancelled) {
+          setCanCreate(create);
+          setCanUpdateCluster(update);
+          setUpdatableNamespaces([]);
+        }
+        return;
+      }
+      const targets = selectedProject ? [selectedProject] : namespaces;
+      const checks = await Promise.all(
+        targets.map(async (namespace) => ({
+          namespace,
+          create: await canI('create', kind.group, kind.plural, namespace),
+          update: await canI('update', kind.group, kind.plural, namespace),
+        })),
+      );
+      if (!cancelled) {
+        setCanCreate(checks.some((item) => item.create));
+        setCanUpdateCluster(false);
+        setUpdatableNamespaces(checks.filter((item) => item.update).map((item) => item.namespace));
+      }
+    };
+    void check();
+    return () => {
+      cancelled = true;
+    };
+  }, [kind.group, kind.plural, kind.scope, namespaces, selectedProject]);
+
   const canEditItem = (item: KServeSettingsResource): boolean => {
     if (isPreInstalled(item)) {
       return false;
     }
     if (kind.scope === 'Namespaced') {
-      return access.forProject(item.metadata.namespace ?? '').canEditDeployments;
+      return updatableNamespaces.includes(item.metadata.namespace ?? '');
     }
-    return canEditCluster;
+    return canUpdateCluster;
   };
 
   const load = React.useCallback(async () => {

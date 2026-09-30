@@ -107,12 +107,18 @@ const extensions: Extension[] = [
       section: 'settings',
       group: '9_settings',
     },
+    flags: {
+      required: ['kserve-settings'],
+    },
   } satisfies HrefNavItemExtension,
   {
     type: 'app.route',
     properties: {
       path: '/settings/*',
       component: () => import('./pages/settings/Settings'),
+    },
+    flags: {
+      required: ['kserve-settings'],
     },
   } satisfies RouteExtension,
   {

@@ -226,7 +226,7 @@ const ProjectsList: React.FC = () => {
           Cluster requests run as the signed-in user. Sign in with StarVault before loading projects.
         </Alert>
       ) : null}
-      {session && access.source === 'oidc' && access.consoleRole === 'none' && filteredProjects.length === 0 ? (
+      {session && access.source === 'oidc' && !accessError && access.consoleRole === 'none' && filteredProjects.length === 0 ? (
         <Alert variant="info" isInline title="No platform role assigned" style={{ marginBottom: '1rem' }}>
           Signed in as {access.username ?? session.user.username}
           {session.user.sub && session.user.sub !== (access.username ?? session.user.username)

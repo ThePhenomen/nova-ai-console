@@ -421,6 +421,7 @@ export const bootstrapAccess = (username?: string): PlatformAccess => {
     source: 'bootstrap',
     consoleRole: 'admin',
     canCreateProjects: true,
+    canViewKserveCluster: true,
     canEditKserveCluster: true,
     username,
     services,
@@ -434,6 +435,7 @@ export const emptyAccess = (source: PlatformAccess['source'], username?: string)
   source,
   consoleRole: 'none',
   canCreateProjects: false,
+  canViewKserveCluster: false,
   canEditKserveCluster: false,
   username,
   services: [],
@@ -461,11 +463,12 @@ const WRITE_VERBS = new Set(['*', 'create', 'update', 'patch', 'delete']);
 const CONSOLE_AUTH_API_GROUP = 'auth.nova-platform.io';
 const CONSOLE_RBAC_RESOURCES = ['platformroles', 'platformrolebindings'];
 
-type KserveGrant = { read: boolean; writeNamespaced: boolean; writeCluster: boolean };
+type KserveGrant = { read: boolean; writeNamespaced: boolean; readCluster: boolean; writeCluster: boolean };
 
 const emptyKserveGrant = (): KserveGrant => ({
   read: false,
   writeNamespaced: false,
+  readCluster: false,
   writeCluster: false,
 });
 
@@ -489,6 +492,9 @@ const kserveGrantFromRules = (
       }
       if (namespaced && canWrite) {
         grant.writeNamespaced = true;
+      }
+      if (scope === 'cluster' && clusterScoped && canRead) {
+        grant.readCluster = true;
       }
       if (scope === 'cluster' && clusterScoped && canWrite) {
         grant.writeCluster = true;
@@ -516,6 +522,7 @@ const kserveGrantForRole = (
     return {
       read: grant.read || next.read,
       writeNamespaced: grant.writeNamespaced || next.writeNamespaced,
+      readCluster: grant.readCluster || next.readCluster,
       writeCluster: grant.writeCluster || next.writeCluster,
     };
   }, emptyKserveGrant());
@@ -607,6 +614,7 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
   const projectRbacWriters = new Set<string>();
   let clusterDeploymentRead = false;
   let clusterDeploymentWrite = false;
+  let canViewKserveCluster = false;
   let canEditKserveCluster = false;
   const componentServices = componentServicesByNamespace(input.user.groups);
 
@@ -628,7 +636,10 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
     const clusterKserve = kserveGrantForRole(role, clusterRoles, 'cluster');
     const consoleGrant = consoleGrantForRole(role, clusterRoles);
     const kserve = target === 'Cluster' ? clusterKserve : namespacedKserve;
-    if (clusterKserve.writeCluster) {
+    if (target === 'Cluster' && (clusterKserve.readCluster || clusterKserve.writeCluster)) {
+      canViewKserveCluster = true;
+    }
+    if (target === 'Cluster' && clusterKserve.writeCluster) {
       canEditKserveCluster = true;
     }
 
@@ -706,6 +717,7 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
     source: 'oidc',
     consoleRole,
     canCreateProjects,
+    canViewKserveCluster,
     canEditKserveCluster,
     username: input.user.username,
     services: grantedServices,
@@ -738,6 +750,10 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
 
 export const hasProjectService = (access: ProjectAccess, service: string): boolean =>
   access.services.some((item) => canonicalConsoleService(item) === canonicalConsoleService(service));
+
+export const canShowKserveSettings = (access: PlatformAccess, projectName: string): boolean =>
+  access.canViewKserveCluster ||
+  (projectName !== '' && hasProjectService(access.forProject(projectName), 'Deployments'));
 
 export const hasConsoleService = (access: PlatformAccess, service: string): boolean =>
   access.services.some((item) => canonicalConsoleService(item) === canonicalConsoleService(service));
