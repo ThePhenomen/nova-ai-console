@@ -116,6 +116,7 @@ const KServeSettings: React.FC = () => {
 
   const [canCreate, setCanCreate] = React.useState(false);
   const [canUpdateCluster, setCanUpdateCluster] = React.useState(false);
+  const [creatableNamespaces, setCreatableNamespaces] = React.useState<string[]>([]);
   const [updatableNamespaces, setUpdatableNamespaces] = React.useState<string[]>([]);
 
   React.useEffect(() => {
@@ -129,6 +130,7 @@ const KServeSettings: React.FC = () => {
         if (!cancelled) {
           setCanCreate(create);
           setCanUpdateCluster(update);
+          setCreatableNamespaces([]);
           setUpdatableNamespaces([]);
         }
         return;
@@ -144,6 +146,7 @@ const KServeSettings: React.FC = () => {
       if (!cancelled) {
         setCanCreate(checks.some((item) => item.create));
         setCanUpdateCluster(false);
+        setCreatableNamespaces(checks.filter((item) => item.create).map((item) => item.namespace));
         setUpdatableNamespaces(checks.filter((item) => item.update).map((item) => item.namespace));
       }
     };
@@ -240,7 +243,7 @@ const KServeSettings: React.FC = () => {
     }
   };
 
-  const createNamespaces = selectedProject ? [selectedProject] : editableNamespaces;
+  const createNamespaces = selectedProject ? [selectedProject] : creatableNamespaces;
   const selectKind = (next: SettingsKindCatalog) => {
     setIsCreateOpen(false);
     setEditTarget(null);
