@@ -10,8 +10,6 @@ import {
   EmptyStateFooter,
   Flex,
   FlexItem,
-  FormSelect,
-  FormSelectOption,
   Label,
   Modal,
   ModalBody,
@@ -26,7 +24,7 @@ import {
   ToolbarContent,
   ToolbarItem,
 } from '@patternfly/react-core';
-import { CubesIcon, FolderIcon } from '@patternfly/react-icons';
+import { CubesIcon } from '@patternfly/react-icons';
 import {
   ActionsColumn,
   Table,
@@ -37,11 +35,10 @@ import {
   Tr,
   type ThProps,
 } from '@patternfly/react-table';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { usePlatformAccess } from '../../../auth/usePlatformAccess';
+import { useNavigate, useParams } from 'react-router-dom';
 import { canI } from '../../../cluster/accessReview';
 import { K8sApiError } from '../../../cluster/k8sClient';
-import { listProjects } from '../../projects/projectApi';
+import { useSelectedProject } from '../../projects/selectedProjectStore';
 import { deleteSettingsResource, listSettingsResources } from './api';
 import {
   SETTINGS_KIND_CATALOG,
@@ -93,10 +90,9 @@ const KServeSettings: React.FC = () => {
   const { tab } = useParams<{ tab?: string }>();
   const kind = settingsKindByTab(tab);
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { access } = usePlatformAccess();
+  const globalProject = useSelectedProject();
+  const scope = kind.scope === 'Namespaced' ? globalProject : '';
   const [items, setItems] = React.useState<KServeSettingsResource[]>([]);
-  const [namespaces, setNamespaces] = React.useState<string[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -108,16 +104,9 @@ const KServeSettings: React.FC = () => {
   const [sortColumn, setSortColumn] = React.useState<SortColumn>('name');
   const [sortDirection, setSortDirection] = React.useState<'asc' | 'desc'>('asc');
 
-  const requestedProject = searchParams.get('project') ?? '';
-  const selectedProject =
-    kind.scope === 'Namespaced' && requestedProject && namespaces.includes(requestedProject)
-      ? requestedProject
-      : '';
-
   const [canCreate, setCanCreate] = React.useState(false);
   const [canUpdateCluster, setCanUpdateCluster] = React.useState(false);
-  const [creatableNamespaces, setCreatableNamespaces] = React.useState<string[]>([]);
-  const [updatableNamespaces, setUpdatableNamespaces] = React.useState<string[]>([]);
+  const [canUpdateNamespaced, setCanUpdateNamespaced] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -130,38 +119,40 @@ const KServeSettings: React.FC = () => {
         if (!cancelled) {
           setCanCreate(create);
           setCanUpdateCluster(update);
-          setCreatableNamespaces([]);
-          setUpdatableNamespaces([]);
+          setCanUpdateNamespaced(false);
         }
         return;
       }
-      const targets = selectedProject ? [selectedProject] : namespaces;
-      const checks = await Promise.all(
-        targets.map(async (namespace) => ({
-          namespace,
-          create: await canI('create', kind.group, kind.plural, namespace),
-          update: await canI('update', kind.group, kind.plural, namespace),
-        })),
-      );
+      if (!scope) {
+        if (!cancelled) {
+          setCanCreate(false);
+          setCanUpdateCluster(false);
+          setCanUpdateNamespaced(false);
+        }
+        return;
+      }
+      const [create, update] = await Promise.all([
+        canI('create', kind.group, kind.plural, scope),
+        canI('update', kind.group, kind.plural, scope),
+      ]);
       if (!cancelled) {
-        setCanCreate(checks.some((item) => item.create));
+        setCanCreate(create);
         setCanUpdateCluster(false);
-        setCreatableNamespaces(checks.filter((item) => item.create).map((item) => item.namespace));
-        setUpdatableNamespaces(checks.filter((item) => item.update).map((item) => item.namespace));
+        setCanUpdateNamespaced(update);
       }
     };
     void check();
     return () => {
       cancelled = true;
     };
-  }, [kind.group, kind.plural, kind.scope, namespaces, selectedProject]);
+  }, [kind.group, kind.plural, kind.scope, scope]);
 
   const canEditItem = (item: KServeSettingsResource): boolean => {
     if (isPreInstalled(item)) {
       return false;
     }
     if (kind.scope === 'Namespaced') {
-      return updatableNamespaces.includes(item.metadata.namespace ?? '');
+      return canUpdateNamespaced && item.metadata.namespace === scope;
     }
     return canUpdateCluster;
   };
@@ -171,44 +162,30 @@ const KServeSettings: React.FC = () => {
     setError(null);
     try {
       if (kind.scope === 'Cluster') {
-        setNamespaces([]);
-        const listed = await listSettingsResources(kind);
-        setItems(listed);
+        setItems(await listSettingsResources(kind));
         return;
       }
-      const canListNamespaces = await canI('list', '', 'namespaces');
-      const scoped = canListNamespaces
-        ? (await listProjects()).map((project) => project.name)
-        : access.visibleProjects.filter((name) => access.canViewProject(name));
-      setNamespaces(scoped);
-      const lists = await Promise.all(
-        scoped.map(async (namespace) => {
-          try {
-            return await listSettingsResources(kind, namespace);
-          } catch {
-            return [];
-          }
-        }),
-      );
-      setItems(lists.flat());
+      if (!scope) {
+        setItems([]);
+        return;
+      }
+      setItems(await listSettingsResources(kind, scope));
     } catch (err) {
       setError(err instanceof K8sApiError ? err.message : 'Failed to load KServe settings.');
       setItems([]);
     } finally {
       setIsLoading(false);
     }
-  }, [access, kind]);
+  }, [kind, scope]);
 
   React.useEffect(() => {
     void load();
   }, [load]);
 
-  const displayedItems = React.useMemo(() => {
-    const scoped = selectedProject
-      ? items.filter((item) => item.metadata.namespace === selectedProject)
-      : items;
-    return scoped.toSorted((left, right) => compareItems(left, right, sortColumn, sortDirection));
-  }, [items, selectedProject, sortColumn, sortDirection]);
+  const displayedItems = React.useMemo(
+    () => items.toSorted((left, right) => compareItems(left, right, sortColumn, sortDirection)),
+    [items, sortColumn, sortDirection],
+  );
 
   const getSortParams = (column: SortColumn): ThProps['sort'] => ({
     sortBy: {
@@ -243,7 +220,7 @@ const KServeSettings: React.FC = () => {
     }
   };
 
-  const createNamespaces = selectedProject ? [selectedProject] : creatableNamespaces;
+  const createNamespaces = scope ? [scope] : [];
   const selectKind = (next: SettingsKindCatalog) => {
     setIsCreateOpen(false);
     setEditTarget(null);
@@ -277,50 +254,6 @@ const KServeSettings: React.FC = () => {
         <Content component="p" style={{ marginBottom: '0.75rem' }}>
           {kind.description}
         </Content>
-        {kind.scope === 'Namespaced' ? (
-          <Flex
-            alignItems={{ default: 'alignItemsCenter' }}
-            spaceItems={{ default: 'spaceItemsMd' }}
-            flexWrap={{ default: 'wrap' }}
-            style={{ marginBottom: '1rem' }}
-          >
-            <FlexItem>
-              <span style={{ fontWeight: 600 }}>Project</span>
-            </FlexItem>
-            <FlexItem>
-              <FormSelect
-                id="settings-project-filter"
-                value={selectedProject}
-                onChange={(_event, value) => {
-                  if (value) {
-                    setSearchParams({ project: value });
-                    return;
-                  }
-                  setSearchParams({});
-                }}
-                aria-label="Project"
-                style={{ width: '14rem' }}
-              >
-                <FormSelectOption value="" label="All projects" />
-                {namespaces.map((namespace) => (
-                  <FormSelectOption key={namespace} value={namespace} label={namespace} />
-                ))}
-              </FormSelect>
-            </FlexItem>
-            {selectedProject ? (
-              <FlexItem>
-                <span>Go to </span>
-                <Link
-                  to={`/projects/${encodeURIComponent(selectedProject)}/overview`}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}
-                >
-                  <FolderIcon />
-                  {selectedProject}
-                </Link>
-              </FlexItem>
-            ) : null}
-          </Flex>
-        ) : null}
         {error ? (
           <Alert variant="danger" isInline title="Could not load resources" style={{ marginBottom: '1rem' }}>
             {error}
@@ -370,9 +303,11 @@ const KServeSettings: React.FC = () => {
         {!isLoading && displayedItems.length === 0 && !error ? (
           <EmptyState headingLevel="h2" titleText={`No ${kind.title.toLowerCase()}`} icon={CubesIcon}>
             <EmptyStateBody>
-              {canCreate
-                ? `Create a ${kind.kind} from fields or paste a YAML manifest.`
-                : `No ${kind.kind} resources are visible with your current role.`}
+              {kind.scope === 'Namespaced' && !scope
+                ? 'Select a project in the page header to view serving runtimes.'
+                : canCreate
+                  ? `Create a ${kind.kind} from fields or paste a YAML manifest.`
+                  : `No ${kind.kind} resources are visible with your current role.`}
             </EmptyStateBody>
             {canCreate ? (
               <EmptyStateFooter>
@@ -404,7 +339,6 @@ const KServeSettings: React.FC = () => {
             </Thead>
             <Tbody>
               {displayedItems.map((item) => {
-                const namespace = item.metadata.namespace ?? '';
                 const preInstalled = isPreInstalled(item);
                 const engines = runtimeEngineTags(item);
                 const version = runtimeVersionTag(item);
@@ -449,7 +383,7 @@ const KServeSettings: React.FC = () => {
                     ];
                 return (
                   <Tr
-                    key={`${kind.kind}/${namespace}/${item.metadata.name}`}
+                    key={`${kind.kind}/${item.metadata.namespace ?? ''}/${item.metadata.name}`}
                     isClickable
                     onRowClick={() => openDetails(item)}
                   >
@@ -476,13 +410,6 @@ const KServeSettings: React.FC = () => {
                           <FlexItem>
                             <Label color="blue" isCompact>
                               {version}
-                            </Label>
-                          </FlexItem>
-                        ) : null}
-                        {kind.scope === 'Namespaced' && !selectedProject && namespace ? (
-                          <FlexItem>
-                            <Label color="grey" isCompact>
-                              {namespace}
                             </Label>
                           </FlexItem>
                         ) : null}

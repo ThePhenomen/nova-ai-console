@@ -56,7 +56,7 @@ export const SETTINGS_KIND_CATALOG: SettingsKindCatalog[] = [
   {
     kind: 'ServingRuntime',
     title: 'Serving runtimes',
-    description: 'Project-scoped runtimes. Developers can create and edit these in their projects.',
+    description: 'Project-scoped runtimes in the selected project.',
     apiVersion: 'serving.kserve.io/v1alpha1',
     group: 'serving.kserve.io',
     version: 'v1alpha1',

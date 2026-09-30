@@ -1048,7 +1048,7 @@ const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
               {error}
             </Alert>
           ) : null}
-          {kind.scope === 'Namespaced' && namespaces && namespaces.length > 0 ? (
+          {kind.scope === 'Namespaced' && namespaces && namespaces.length > 1 ? (
             <FormGroup label="Project" isRequired fieldId="settings-namespace">
               <FormSelect
                 id="settings-namespace"
