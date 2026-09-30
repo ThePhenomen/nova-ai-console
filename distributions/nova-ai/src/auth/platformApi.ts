@@ -52,6 +52,11 @@ export const updatePlatformRole = (role: PlatformRoleKind): Promise<PlatformRole
     },
   );
 
+export const deletePlatformRole = (name: string): Promise<void> =>
+  k8sRequest(`${PLATFORM_AUTH_API}/platformroles/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+
 export const createPlatformRoleBinding = (
   binding: PlatformRoleBindingKind,
 ): Promise<PlatformRoleBindingKind> =>

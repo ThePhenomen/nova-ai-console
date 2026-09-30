@@ -32,6 +32,7 @@ import {
 } from '../../../auth/access';
 import {
   createPlatformRole,
+  deletePlatformRole,
   listPlatformRoleBindings,
   listPlatformRoles,
   updatePlatformRole,
@@ -63,11 +64,13 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const [roles, setRoles] = React.useState<PlatformRoleKind[]>([]);
   const [boundRoleNames, setBoundRoleNames] = React.useState<Set<string>>(new Set());
   const [error, setError] = React.useState<string | null>(null);
+  const [actionError, setActionError] = React.useState<string | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingRole, setEditingRole] = React.useState<PlatformRoleKind | null>(null);
+  const [roleToDelete, setRoleToDelete] = React.useState<PlatformRoleKind | null>(null);
   const [name, setName] = React.useState('');
   const [selectors, setSelectors] = React.useState<SelectorDraft[]>([]);
   const [selectorKey, setSelectorKey] = React.useState('');
@@ -130,6 +133,27 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
     setApplicationDraft('');
     setFormError(null);
     setIsModalOpen(true);
+  };
+
+  const removeRole = async () => {
+    if (!roleToDelete) {
+      return;
+    }
+    setActionError(null);
+    setIsSaving(true);
+    try {
+      await deletePlatformRole(roleToDelete.metadata.name);
+      setRoleToDelete(null);
+      await load();
+    } catch (err) {
+      setActionError(
+        err instanceof K8sApiError || err instanceof Error
+          ? err.message
+          : 'Failed to delete PlatformRole.',
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const openEdit = (role: PlatformRoleKind) => {
@@ -338,6 +362,18 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
                             openEdit(role);
                           },
                         },
+                        {
+                          isSeparator: true,
+                        },
+                        {
+                          title: 'Delete',
+                          onClick: (event) => {
+                            event?.preventDefault();
+                            event?.stopPropagation();
+                            setActionError(null);
+                            setRoleToDelete(role);
+                          },
+                        },
                       ]}
                     />
                   </Td>
@@ -461,6 +497,43 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
               {editingRole ? 'Save' : 'Create'}
             </Button>
             <Button variant="link" onClick={closeModal} isDisabled={isSaving}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </Modal>
+      ) : null}
+      {roleToDelete ? (
+        <Modal
+          isOpen
+          variant="small"
+          onClose={() => {
+            setRoleToDelete(null);
+            setActionError(null);
+          }}
+          aria-label="Delete platform role"
+        >
+          <ModalHeader title="Delete platform role" />
+          <ModalBody>
+            {actionError ? (
+              <Alert variant="danger" isInline title="Could not delete role">
+                {actionError}
+              </Alert>
+            ) : null}
+            Delete {roleToDelete.metadata.name}? Bindings that still reference this role will stop
+            resolving until they are removed or pointed at another role.
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="danger" onClick={() => void removeRole()} isLoading={isSaving} isDisabled={isSaving}>
+              Delete
+            </Button>
+            <Button
+              variant="link"
+              onClick={() => {
+                setRoleToDelete(null);
+                setActionError(null);
+              }}
+              isDisabled={isSaving}
+            >
               Cancel
             </Button>
           </ModalFooter>
