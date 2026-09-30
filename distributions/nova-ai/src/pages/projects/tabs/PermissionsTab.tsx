@@ -9,6 +9,10 @@ import {
   FormGroup,
   FormSelect,
   FormSelectOption,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
   PageSection,
   Radio,
   Spinner,
@@ -17,7 +21,7 @@ import {
   ToolbarContent,
   ToolbarItem,
 } from '@patternfly/react-core';
-import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
+import { ActionsColumn, Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import {
   createPlatformRoleBinding,
   deletePlatformRoleBinding,
@@ -81,7 +85,21 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
   const [subjectKind, setSubjectKind] = React.useState<'User' | 'Group'>('User');
   const [subjectName, setSubjectName] = React.useState('');
   const [roleName, setRoleName] = React.useState('');
-  const [isFormOpen, setIsFormOpen] = React.useState(false);
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setFormError(null);
+    setSubjectName('');
+  };
+
+  const openGrant = () => {
+    setFormError(null);
+    setSubjectKind('User');
+    setSubjectName('');
+    setRoleName((current) => current || roles[0]?.metadata.name || '');
+    setIsModalOpen(true);
+  };
 
   const load = React.useCallback(async () => {
     setIsLoading(true);
@@ -155,7 +173,7 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
         },
       });
       setSubjectName('');
-      setIsFormOpen(false);
+      closeModal();
       await load();
     } catch (err) {
       setFormError(
@@ -207,98 +225,15 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
 
   return (
     <PageSection>
-      {formError ? (
-        <Alert
-          variant="danger"
-          isInline
-          title="Could not update permissions"
-          style={{ marginBottom: '1rem' }}
-        >
-          {formError}
-        </Alert>
-      ) : null}
       <Toolbar>
         <ToolbarContent>
           <ToolbarItem>
-            <Button
-              variant="primary"
-              onClick={() => {
-                setFormError(null);
-                setIsFormOpen(true);
-              }}
-              isDisabled={isFormOpen || roles.length === 0}
-            >
+            <Button variant="primary" onClick={openGrant} isDisabled={roles.length === 0}>
               Grant access
             </Button>
           </ToolbarItem>
         </ToolbarContent>
       </Toolbar>
-      {isFormOpen ? (
-        <Form onSubmit={grant} style={{ marginBottom: '1.5rem', maxWidth: '40rem' }}>
-          <FormGroup role="radiogroup" isInline fieldId="grant-subject-kind" label="Subject">
-            <Radio
-              id="grant-subject-user"
-              name="grant-subject-kind"
-              label="User"
-              isChecked={subjectKind === 'User'}
-              onChange={() => setSubjectKind('User')}
-            />
-            <Radio
-              id="grant-subject-group"
-              name="grant-subject-kind"
-              label="Group"
-              isChecked={subjectKind === 'Group'}
-              onChange={() => setSubjectKind('Group')}
-            />
-          </FormGroup>
-          <FormGroup label="Name" isRequired fieldId="grant-subject-name">
-            <TextInput
-              id="grant-subject-name"
-              value={subjectName}
-              onChange={(_event, value) => setSubjectName(value)}
-              placeholder={subjectKind === 'Group' ? 'platform-admins' : 'alice'}
-              isRequired
-            />
-          </FormGroup>
-          <FormGroup label="Platform role" isRequired fieldId="grant-role">
-            <FormSelect
-              id="grant-role"
-              value={roleName}
-              onChange={(_event, value) => setRoleName(value)}
-              aria-label="Platform role"
-            >
-              {roles.map((role) => (
-                <FormSelectOption
-                  key={role.metadata.name}
-                  value={role.metadata.name}
-                  label={role.metadata.name}
-                />
-              ))}
-            </FormSelect>
-          </FormGroup>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <Button
-              type="submit"
-              variant="primary"
-              isLoading={isSaving}
-              isDisabled={isSaving || roles.length === 0}
-            >
-              Grant
-            </Button>
-            <Button
-              type="button"
-              variant="link"
-              onClick={() => {
-                setIsFormOpen(false);
-                setFormError(null);
-              }}
-              isDisabled={isSaving}
-            >
-              Cancel
-            </Button>
-          </div>
-        </Form>
-      ) : null}
       {bindings.length === 0 ? (
         <EmptyState headingLevel="h2" titleText="No permissions">
           <EmptyStateBody>
@@ -317,7 +252,7 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
               <Th>Subjects</Th>
               <Th>Target</Th>
               <Th>Phase</Th>
-              <Th>Actions</Th>
+              <Th screenReaderText="Actions" />
             </Tr>
           </Thead>
           <Tbody>
@@ -328,24 +263,93 @@ const PermissionsTab: React.FC<PermissionsTabProps> = ({ projectName }) => {
                 <Td dataLabel="Subjects">{formatSubjects(binding)}</Td>
                 <Td dataLabel="Target">{bindingTarget(binding)}</Td>
                 <Td dataLabel="Phase">{binding.status?.phase ?? '—'}</Td>
-                <Td dataLabel="Actions">
-                  {canRevokeInProject(binding, projectName) ? (
-                    <Button
-                      variant="link"
-                      isDisabled={isSaving}
-                      onClick={() => void revoke(binding.metadata.name)}
-                    >
-                      Revoke
-                    </Button>
-                  ) : (
-                    'Inherited'
-                  )}
+                <Td isActionCell>
+                  <ActionsColumn
+                    items={[
+                      {
+                        title: 'Revoke',
+                        isDisabled: isSaving || !canRevokeInProject(binding, projectName),
+                        onClick: (event) => {
+                          event?.preventDefault();
+                          event?.stopPropagation();
+                          void revoke(binding.metadata.name);
+                        },
+                      },
+                    ]}
+                  />
                 </Td>
               </Tr>
             ))}
           </Tbody>
         </Table>
       )}
+      {isModalOpen ? (
+        <Modal isOpen variant="medium" onClose={closeModal} aria-label="Grant access">
+          <ModalHeader title="Grant access" />
+          <ModalBody>
+            <Form id="grant-access-form" onSubmit={grant}>
+              {formError ? (
+                <Alert variant="danger" isInline title="Could not update permissions">
+                  {formError}
+                </Alert>
+              ) : null}
+              <FormGroup role="radiogroup" isInline fieldId="grant-subject-kind" label="Subject">
+                <Radio
+                  id="grant-subject-user"
+                  name="grant-subject-kind"
+                  label="User"
+                  isChecked={subjectKind === 'User'}
+                  onChange={() => setSubjectKind('User')}
+                />
+                <Radio
+                  id="grant-subject-group"
+                  name="grant-subject-kind"
+                  label="Group"
+                  isChecked={subjectKind === 'Group'}
+                  onChange={() => setSubjectKind('Group')}
+                />
+              </FormGroup>
+              <FormGroup label="Name" isRequired fieldId="grant-subject-name">
+                <TextInput
+                  id="grant-subject-name"
+                  value={subjectName}
+                  onChange={(_event, value) => setSubjectName(value)}
+                  placeholder={subjectKind === 'Group' ? 'nova-ai.admins' : 'ml-admin'}
+                  isRequired
+                  isDisabled={isSaving}
+                />
+              </FormGroup>
+              <FormGroup label="Platform role" isRequired fieldId="grant-role">
+                <FormSelect
+                  id="grant-role"
+                  value={roleName}
+                  onChange={(_event, value) => setRoleName(value)}
+                  aria-label="Platform role"
+                  isDisabled={isSaving}
+                >
+                  {roles.map((role) => (
+                    <FormSelectOption key={role.metadata.name} value={role.metadata.name} label={role.metadata.name} />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+            </Form>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              type="submit"
+              form="grant-access-form"
+              variant="primary"
+              isLoading={isSaving}
+              isDisabled={isSaving || roles.length === 0}
+            >
+              Grant
+            </Button>
+            <Button variant="link" onClick={closeModal} isDisabled={isSaving}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </Modal>
+      ) : null}
     </PageSection>
   );
 };

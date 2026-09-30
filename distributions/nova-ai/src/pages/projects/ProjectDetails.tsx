@@ -110,9 +110,11 @@ const ProjectDetails: React.FC = () => {
         </Breadcrumb>
         <Content component="h1">{projectName}</Content>
       </PageSection>
-      <PageSection type="tabs" hasBodyWrapper={false}>
+      <PageSection type="tabs">
         <Tabs
+          aria-label="Project sections"
           activeKey={activeTab}
+          inset={{ default: 'insetNone' }}
           onSelect={(_event, tabKey) => {
             navigate(`/projects/${projectName}/${String(tabKey)}`);
           }}
