@@ -1,5 +1,5 @@
 export type ConsoleNavService = {
-  id: 'workbench' | 'experiments' | 'deployments';
+  id: 'workbench' | 'experiments' | 'pipelines' | 'deployments';
   title: string;
   href: string;
   description: string;
@@ -20,6 +20,12 @@ export const CONSOLE_NAV_SERVICES: ConsoleNavService[] = [
     description: 'MLflow experiments will appear here.',
   },
   {
+    id: 'pipelines',
+    title: 'Pipelines',
+    href: '/pipelines',
+    description: 'Pipelines in this project will appear here.',
+  },
+  {
     id: 'deployments',
     title: 'Deployments',
     href: '/deployments',
@@ -29,10 +35,9 @@ export const CONSOLE_NAV_SERVICES: ConsoleNavService[] = [
 
 export const CONSOLE_NAV_SERVICE_TITLES = CONSOLE_NAV_SERVICES.map((item) => item.title);
 
-/** Project tab. Shown when the user is in a nova-ai-airflow.<namespace>.<level> group. */
+/** Same title as the Pipelines nav item. Used by the project tab. */
 export const PIPELINES_SERVICE = 'Pipelines';
 
-export const CONSOLE_TAB_SERVICES: Array<{ id: string; title: string }> = [
-  ...CONSOLE_NAV_SERVICES.map(({ id, title }) => ({ id, title })),
-  { id: 'pipelines', title: PIPELINES_SERVICE },
-];
+export const CONSOLE_TAB_SERVICES: Array<{ id: string; title: string }> = CONSOLE_NAV_SERVICES.map(
+  ({ id, title }) => ({ id, title }),
+);

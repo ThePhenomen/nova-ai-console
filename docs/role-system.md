@@ -237,14 +237,14 @@ Target Cluster на `nova-ai-kserve.ml-team.edit` специально даёт 
 
 | Flag | Когда true |
 |---|---|
-| `workbench`, `experiments`, `deployments` | у **выбранного** проекта `hasProjectService` для этого сервиса |
+| `workbench`, `experiments`, `pipelines`, `deployments` | у **выбранного** проекта `hasProjectService` для этого сервиса |
 | `kserve-settings` | `canViewKserveCluster` **или** у выбранного проекта есть сервис Deployments |
 
 `extensions.ts` вешает `flags.required` на пункты sidebar и маршруты. Projects (`/projects`) флага не имеет и виден всегда после входа. Пустая секция Settings скрывается, когда единственный ребёнок KServe выключен флагом.
 
 Выбранный проект живёт в `sessionStorage` (`nova-ai.selectedProject`) и в шапке (`ProjectSwitcher`). Смена проекта пересчитывает флаги: Experiments в `ml-team` не означает Experiments в другом проекте.
 
-`ProjectSwitcher`, если открыт Workbench / Experiments / Deployments / Settings, а для нового проекта флаг погас, уводит на `/projects/<name>/overview`.
+`ProjectSwitcher`, если открыт Workbench / Experiments / Pipelines / Deployments / Settings, а для нового проекта флаг погас, уводит на `/projects/<name>/overview`.
 
 `canShowKserveSettings` поэтому зависит от выбранного проекта. Пользователь только с `nova-ai-kserve.ml-team.view` видит Settings, пока выбран `ml-team` (есть Deployments). Пользователь с `nova-ai-kserve.cluster-view` (target Cluster) видит Settings при любом выбранном проекте. Кнопки Create/Edit на Settings всё равно идут через SSAR и у view-роли останутся выключены.
 

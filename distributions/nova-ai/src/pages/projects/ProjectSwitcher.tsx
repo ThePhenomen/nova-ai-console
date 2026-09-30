@@ -11,6 +11,7 @@ import { getSelectedProject, setSelectedProject, useSelectedProject } from './se
 const PAGE_SERVICES = [
   { prefix: '/workbench', service: 'Workbench' },
   { prefix: '/experiments', service: 'Experiments' },
+  { prefix: '/pipelines', service: 'Pipelines' },
   { prefix: '/deployments', service: 'Deployments' },
 ];
 

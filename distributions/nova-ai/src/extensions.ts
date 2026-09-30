@@ -43,6 +43,18 @@ const extensions: Extension[] = [
   {
     type: 'app.navigation/href',
     properties: {
+      id: 'pipelines',
+      title: 'Pipelines',
+      href: '/pipelines',
+      path: '/pipelines',
+    },
+    flags: {
+      required: ['pipelines'],
+    },
+  } satisfies HrefNavItemExtension,
+  {
+    type: 'app.navigation/href',
+    properties: {
       id: 'deployments',
       title: 'Deployments',
       href: '/deployments',
@@ -77,6 +89,16 @@ const extensions: Extension[] = [
     },
     flags: {
       required: ['experiments'],
+    },
+  } satisfies RouteExtension,
+  {
+    type: 'app.route',
+    properties: {
+      path: '/pipelines',
+      component: () => import('./pages/pipelines/Pipelines'),
+    },
+    flags: {
+      required: ['pipelines'],
     },
   } satisfies RouteExtension,
   {

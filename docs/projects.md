@@ -12,7 +12,7 @@
 
 ## 0. Что с чем связано
 
-Открытие проекта в списке записывает его имя в глобальный выбор (`sessionStorage`, ключ `nova-ai.selectedProject`). Sidebar Workbench / Experiments / Deployments и пункт Settings → KServe смотрят на **этот** проект, не на проект, который просто мелькнул в таблице.
+Открытие проекта в списке записывает его имя в глобальный выбор (`sessionStorage`, ключ `nova-ai.selectedProject`). Sidebar Workbench / Experiments / Pipelines / Deployments и пункт Settings → KServe смотрят на **этот** проект, не на проект, который просто мелькнул в таблице.
 
 | Экран | URL | От чего зависит видимость |
 |---|---|---|
@@ -24,7 +24,7 @@
 | Roles / Permissions | `…/roles`, `…/permissions` | SSAR `update` на `platformroles` или `platformrolebindings` |
 | Карточка модели из проекта | `/projects/:name/deployments/:kind/:name` | маршрут Projects, страница `DeploymentDetails` |
 
-Вкладки Workbench, Experiments и Pipelines внутри проекта сейчас заглушки (`PlaceholderTab`). Рабочий список моделей — Deployments. Pipelines в sidebar нет: это только вкладка проекта.
+Вкладки Workbench, Experiments и Pipelines внутри проекта сейчас заглушки (`PlaceholderTab`). Рабочий список моделей — Deployments. Pipelines в sidebar появляется по тому же флагу, что и вкладка проекта: группа `nova-ai-airflow.<namespace>.*` или `nova-ai.admins` для `ml-team`.
 
 Кнопки списка (Create / Edit / Delete project, Edit permissions) и вкладки Roles / Permissions включаются одним хуком `useConsoleResourceAccess` и **не** смотрят на метку persona.
 
@@ -112,7 +112,7 @@ Create виден в toolbar, в kebab его нет.
 
 Выбор другого проекта, когда пользователь уже внутри `/projects/<old>/…`, переходит на `/projects/<new>/<тот же хвост>`. На `/projects` смена select только меняет глобальный выбор и флаги sidebar, маршрут списка не трогает.
 
-Если при выбранном проекте открыты `/workbench`, `/experiments`, `/deployments` или `/settings`, а для этого проекта сервис скрыт, switcher делает `replace` на `/projects/<name>/overview`.
+Если при выбранном проекте открыты `/workbench`, `/experiments`, `/pipelines`, `/deployments` или `/settings`, а для этого проекта сервис скрыт, switcher делает `replace` на `/projects/<name>/overview`.
 
 ### A.4 Карточка проекта
 
@@ -440,7 +440,7 @@ Label `nova-ai.io/kubernetes-target` читается только в момен
 ## 9. Ограничения текущей реализации
 
 - Workbench, Experiments и Pipelines внутри проекта — заглушки. Данные MLflow, Airflow и JupyterHub консоль не читает.
-- Pipelines нет в sidebar, только вкладка проекта.
+- Pipelines в sidebar — `/pipelines`, флаг `pipelines` с выбранного проекта. Внутри проекта это та же заглушка.
 - Имя проекта в форме не допускает точки. Имя PlatformRole допускает.
 - `dns1123Name` при Grant выкидывает точки из имени биндинга. Длинная связка project + subject + role обрезается до 63 символов, разные пары могут схлопнуться в одно имя.
 - Revoke выключен у всех биндингов без аннотации `nova-ai.io/granted-in-project` на этот проект, в том числе у выданных в другом проекте.

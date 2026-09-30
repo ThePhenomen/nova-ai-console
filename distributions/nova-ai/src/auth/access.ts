@@ -1,4 +1,4 @@
-import { CONSOLE_NAV_SERVICE_TITLES, PIPELINES_SERVICE } from '../consoleServices';
+import { CONSOLE_NAV_SERVICE_TITLES } from '../consoleServices';
 import type {
   AuthUser,
   ConsoleRole,
@@ -422,7 +422,7 @@ const projectAccessFrom = (
 });
 
 export const bootstrapAccess = (username?: string): PlatformAccess => {
-  const services = [...CONSOLE_NAV_SERVICE_TITLES, PIPELINES_SERVICE];
+  const services = [...CONSOLE_NAV_SERVICE_TITLES];
   const project = projectAccessFrom('admin', services, true);
   return {
     source: 'bootstrap',
