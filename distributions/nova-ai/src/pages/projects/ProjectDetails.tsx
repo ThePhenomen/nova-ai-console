@@ -3,8 +3,10 @@ import {
   Alert,
   Breadcrumb,
   BreadcrumbItem,
+  Bullseye,
   Content,
   PageSection,
+  Spinner,
   Tab,
   Tabs,
   TabTitleText,
@@ -66,7 +68,17 @@ const ProjectDetails: React.FC = () => {
     );
   }
 
-  if (!resourceAccess.listNamespaces && !access.canViewProject(projectName)) {
+  if (!resourceAccess.loaded && !access.canViewProject(projectName)) {
+    return (
+      <PageSection>
+        <Bullseye>
+          <Spinner />
+        </Bullseye>
+      </PageSection>
+    );
+  }
+
+  if (resourceAccess.loaded && !resourceAccess.listNamespaces && !access.canViewProject(projectName)) {
     return (
       <PageSection>
         <Alert variant="danger" isInline title="Access denied">
@@ -129,7 +141,7 @@ const ProjectDetails: React.FC = () => {
         </Tabs>
       </PageSection>
       {activeTab === 'overview' ? (
-        <OverviewTab projectName={projectName} canManageRbac={resourceAccess.manageRoles} />
+        <OverviewTab key={projectName} projectName={projectName} canManageRbac={resourceAccess.manageRoles} />
       ) : null}
       {activeTab === 'workbench' ? (
         <PlaceholderTab title="Workbench" description="Workbenches in this project will appear here." />

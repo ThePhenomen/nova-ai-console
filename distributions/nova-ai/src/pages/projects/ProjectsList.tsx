@@ -231,7 +231,12 @@ const ProjectsList: React.FC = () => {
           Cluster requests run as the signed-in user. Sign in with StarVault before loading projects.
         </Alert>
       ) : null}
-      {session && access.source === 'oidc' && !accessError && access.consoleRole === 'none' && filteredProjects.length === 0 ? (
+      {session &&
+      resourceAccess.loaded &&
+      access.source === 'oidc' &&
+      !accessError &&
+      access.consoleRole === 'none' &&
+      filteredProjects.length === 0 ? (
         <Alert variant="info" isInline title="No platform role assigned" style={{ marginBottom: '1rem' }}>
           Signed in as {access.username ?? session.user.username}
           {session.user.sub && session.user.sub !== (access.username ?? session.user.username)
@@ -291,12 +296,12 @@ const ProjectsList: React.FC = () => {
           {error}
         </Alert>
       ) : null}
-      {isLoading || isAccessLoading ? (
+      {isLoading || isAccessLoading || !resourceAccess.loaded ? (
         <Bullseye>
           <Spinner />
         </Bullseye>
       ) : null}
-      {!isLoading && !isAccessLoading && filteredProjects.length === 0 && !error ? (
+      {!isLoading && !isAccessLoading && resourceAccess.loaded && filteredProjects.length === 0 && !error ? (
         <EmptyState headingLevel="h2" titleText="No projects" icon={CubesIcon}>
           <EmptyStateBody>
             {search.trim()
@@ -316,7 +321,7 @@ const ProjectsList: React.FC = () => {
           ) : null}
         </EmptyState>
       ) : null}
-      {!isLoading && !isAccessLoading && filteredProjects.length > 0 ? (
+      {!isLoading && !isAccessLoading && resourceAccess.loaded && filteredProjects.length > 0 ? (
         <>
           <Table aria-label="Projects" variant="compact">
             <Thead>

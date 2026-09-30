@@ -77,18 +77,12 @@ const extensions: Extension[] = [
       path: '/workbench',
       component: () => import('./pages/workbench/Workbench'),
     },
-    flags: {
-      required: ['workbench'],
-    },
   } satisfies RouteExtension,
   {
     type: 'app.route',
     properties: {
       path: '/experiments',
       component: () => import('./pages/experiments/Experiments'),
-    },
-    flags: {
-      required: ['experiments'],
     },
   } satisfies RouteExtension,
   {
@@ -97,18 +91,12 @@ const extensions: Extension[] = [
       path: '/pipelines',
       component: () => import('./pages/pipelines/Pipelines'),
     },
-    flags: {
-      required: ['pipelines'],
-    },
   } satisfies RouteExtension,
   {
     type: 'app.route',
     properties: {
       path: '/deployments/*',
       component: () => import('./pages/deployments/Deployments'),
-    },
-    flags: {
-      required: ['deployments'],
     },
   } satisfies RouteExtension,
   {
@@ -138,9 +126,6 @@ const extensions: Extension[] = [
     properties: {
       path: '/settings/*',
       component: () => import('./pages/settings/Settings'),
-    },
-    flags: {
-      required: ['kserve-settings'],
     },
   } satisfies RouteExtension,
   {

@@ -31,11 +31,10 @@ const ProjectSwitcher: React.FC = () => {
   const [hasLoaded, setHasLoaded] = React.useState(false);
 
   React.useEffect(() => {
-    if (!connection || isAccessLoading) {
+    if (!connection || isAccessLoading || !resourceAccess.loaded) {
       return;
     }
     let cancelled = false;
-    setHasLoaded(false);
     void listProjects()
       .then((projects) => {
         if (cancelled) {
@@ -61,7 +60,7 @@ const ProjectSwitcher: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [access, connection, isAccessLoading, resourceAccess.listNamespaces]);
+  }, [access, connection, isAccessLoading, resourceAccess.listNamespaces, resourceAccess.loaded]);
 
   React.useEffect(() => {
     if (!hasLoaded) {
