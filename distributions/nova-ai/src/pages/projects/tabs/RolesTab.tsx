@@ -8,8 +8,6 @@ import {
   Form,
   FormGroup,
   FormHelperText,
-  FormSelect,
-  FormSelectOption,
   HelperText,
   HelperTextItem,
   Label,
@@ -29,18 +27,11 @@ import { OutlinedQuestionCircleIcon } from '@patternfly/react-icons';
 import { ActionsColumn, Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import {
   bindingAppliesToProject,
-  componentOidcApplication,
   CONSOLE_OIDC_APPLICATION,
-  CONSOLE_PERSONA_LABEL,
-  KUBERNETES_ACCESS_PRESETS,
   OIDC_APPLICATION_NAME,
-  kubernetesAccessFromRole,
-  oidcApplicationsWithConsole,
-  type KubernetesAccessLevel,
 } from '../../../auth/access';
 import {
   createPlatformRole,
-  dns1123Name,
   listPlatformRoleBindings,
   listPlatformRoles,
   updatePlatformRole,
@@ -53,17 +44,7 @@ type RolesTabProps = {
   projectName: string;
 };
 
-type RoleCreateAccess = Exclude<KubernetesAccessLevel, 'none'> | 'oidc';
-
-const ACCESS_OPTIONS: Array<{ id: RoleCreateAccess; title: string }> = [
-  ...(Object.keys(KUBERNETES_ACCESS_PRESETS) as Array<Exclude<KubernetesAccessLevel, 'none'>>).map(
-    (id) => ({
-      id,
-      title: KUBERNETES_ACCESS_PRESETS[id].title,
-    }),
-  ),
-  { id: 'oidc', title: 'OIDC client' },
-];
+type SelectorDraft = { key: string; value: string };
 
 const clusterRolesForRole = (role: PlatformRoleKind): string[] => {
   const resolved = role.status?.resolvedClusterRoles ?? [];
@@ -73,10 +54,10 @@ const clusterRolesForRole = (role: PlatformRoleKind): string[] => {
   return role.status?.aggregatedClusterRole ? [role.status.aggregatedClusterRole] : [];
 };
 
-const applicationsForAccess = (accessLevel: RoleCreateAccess, roleName: string): string[] =>
-  accessLevel === 'oidc' && roleName
-    ? [componentOidcApplication(roleName)]
-    : [CONSOLE_OIDC_APPLICATION];
+const selectorsFromRole = (role: PlatformRoleKind): SelectorDraft[] =>
+  (role.spec?.kubernetes?.clusterRoleSelectors ?? []).flatMap((selector) =>
+    Object.entries(selector.matchLabels ?? {}).map(([key, value]) => ({ key, value })),
+  );
 
 const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const [roles, setRoles] = React.useState<PlatformRoleKind[]>([]);
@@ -88,7 +69,9 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingRole, setEditingRole] = React.useState<PlatformRoleKind | null>(null);
   const [name, setName] = React.useState('');
-  const [accessLevel, setAccessLevel] = React.useState<RoleCreateAccess>('developer');
+  const [selectors, setSelectors] = React.useState<SelectorDraft[]>([]);
+  const [selectorKey, setSelectorKey] = React.useState('');
+  const [selectorValue, setSelectorValue] = React.useState('true');
   const [applications, setApplications] = React.useState<string[]>([]);
   const [applicationDraft, setApplicationDraft] = React.useState('');
 
@@ -129,7 +112,9 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
     setIsModalOpen(false);
     setEditingRole(null);
     setName('');
-    setAccessLevel('developer');
+    setSelectors([]);
+    setSelectorKey('');
+    setSelectorValue('true');
     setApplications([]);
     setApplicationDraft('');
     setFormError(null);
@@ -138,22 +123,40 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const openCreate = () => {
     setEditingRole(null);
     setName('');
-    setAccessLevel('developer');
-    setApplications(applicationsForAccess('developer', ''));
+    setSelectors([]);
+    setSelectorKey('');
+    setSelectorValue('true');
+    setApplications([]);
     setApplicationDraft('');
     setFormError(null);
     setIsModalOpen(true);
   };
 
   const openEdit = (role: PlatformRoleKind) => {
-    const level = kubernetesAccessFromRole(role);
     setEditingRole(role);
     setName(role.metadata.name);
-    setAccessLevel(level === 'none' ? 'oidc' : level);
+    setSelectors(selectorsFromRole(role));
+    setSelectorKey('');
+    setSelectorValue('true');
     setApplications([...(role.spec?.oidc?.applications ?? [])]);
     setApplicationDraft('');
     setFormError(null);
     setIsModalOpen(true);
+  };
+
+  const addSelector = () => {
+    const key = selectorKey.trim();
+    const value = selectorValue.trim();
+    if (!key || !value) {
+      setFormError('A ClusterRole selector needs a label key and a value.');
+      return;
+    }
+    setFormError(null);
+    setSelectors((current) =>
+      current.some((item) => item.key === key && item.value === value) ? current : [...current, { key, value }],
+    );
+    setSelectorKey('');
+    setSelectorValue('true');
   };
 
   const addDraftApplication = () => {
@@ -177,53 +180,43 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
       setFormError('Role name is required.');
       return;
     }
-    const isOidcClient = accessLevel === 'oidc';
-    const roleName = editingRole?.metadata.name ?? (isOidcClient ? trimmed : dns1123Name(trimmed));
-    if (
-      !editingRole &&
-      isOidcClient &&
-      !/^nova-ai-(mlflow|airflow|jupyterhub)\.[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(roleName)
-    ) {
-      setFormError(
-        'Name an instance role as nova-ai-mlflow.team-a, nova-ai-airflow.team-a, or nova-ai-jupyterhub.team-a.',
-      );
+    const roleName = editingRole?.metadata.name ?? trimmed;
+    if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(roleName)) {
+      setFormError('Use a name of lowercase letters, digits, "." and "-", starting and ending with a letter or digit.');
       return;
     }
-    const keepsConsole = (editingRole?.spec?.oidc?.applications ?? applications).includes(
-      CONSOLE_OIDC_APPLICATION,
-    );
-    const nextApplications = keepsConsole
-      ? oidcApplicationsWithConsole(applications)
-      : [...new Set(applications.map((value) => value.trim()).filter((value) => value !== ''))];
+    const nextApplications = [
+      ...new Set(applications.map((value) => value.trim()).filter((value) => value !== '')),
+    ];
+    const clusterRoleSelectors = selectors
+      .map((selector) => ({ key: selector.key.trim(), value: selector.value.trim() }))
+      .filter((selector) => selector.key !== '' && selector.value !== '')
+      .map((selector) => ({ matchLabels: { [selector.key]: selector.value } }));
+    if (nextApplications.length === 0 && clusterRoleSelectors.length === 0) {
+      setFormError('Add a ClusterRole selector or an OIDC application.');
+      return;
+    }
     setIsSaving(true);
     try {
+      const spec = {
+        ...(clusterRoleSelectors.length > 0 ? { kubernetes: { clusterRoleSelectors } } : {}),
+        ...(nextApplications.length > 0 ? { oidc: { applications: nextApplications } } : {}),
+      };
       if (editingRole) {
         await updatePlatformRole({
           ...editingRole,
           spec: {
             ...editingRole.spec,
-            oidc: { applications: nextApplications },
+            kubernetes: clusterRoleSelectors.length > 0 ? { clusterRoleSelectors } : undefined,
+            oidc: nextApplications.length > 0 ? { applications: nextApplications } : undefined,
           },
         });
       } else {
-        const preset = isOidcClient ? undefined : KUBERNETES_ACCESS_PRESETS[accessLevel];
-        const labels: Record<string, string> = { ...consoleScopeLabels() };
-        if (preset?.persona) {
-          labels[CONSOLE_PERSONA_LABEL] = preset.persona;
-        }
-        const clusterRoleSelectors = isOidcClient
-          ? []
-          : (preset?.selectors ?? []).map((key) => ({
-              matchLabels: { [key]: 'true' },
-            }));
         await createPlatformRole({
           apiVersion: 'auth.nova-platform.io/v1alpha1',
           kind: 'PlatformRole',
-          metadata: { name: roleName, labels },
-          spec: {
-            ...(clusterRoleSelectors.length > 0 ? { kubernetes: { clusterRoleSelectors } } : {}),
-            oidc: { applications: nextApplications },
-          },
+          metadata: { name: roleName, labels: consoleScopeLabels() },
+          spec,
         });
       }
       closeModal();
@@ -374,50 +367,68 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
                   id="role-name"
                   value={name}
                   onChange={(_event, value) => setName(value)}
-                  placeholder={accessLevel === 'oidc' ? 'nova-ai-jupyterhub.team-a' : 'nova-ai-experiments'}
+                  placeholder="nova-ai-mlflow.ml-team"
                   isRequired
                   isDisabled={editingRole !== null || isSaving}
                 />
               </FormGroup>
-              {editingRole ? null : (
-                <FormGroup label="Kubernetes access" isRequired fieldId="role-access">
-                  <FormSelect
-                    id="role-access"
-                    value={accessLevel}
-                    onChange={(_event, value) => {
-                      const next = value as RoleCreateAccess;
-                      setAccessLevel(next);
-                      setApplications(applicationsForAccess(next, name.trim().toLowerCase()));
-                    }}
-                    aria-label="Kubernetes access"
-                  >
-                    {ACCESS_OPTIONS.map((option) => (
-                      <FormSelectOption key={option.id} value={option.id} label={option.title} />
+              <FormGroup label="ClusterRole selectors" fieldId="role-selectors">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                    {selectors.map((selector) => (
+                      <Label
+                        key={`${selector.key}=${selector.value}`}
+                        onClose={() =>
+                          setSelectors((current) =>
+                            current.filter((item) => item.key !== selector.key || item.value !== selector.value),
+                          )
+                        }
+                      >
+                        {selector.key}={selector.value}
+                      </Label>
                     ))}
-                  </FormSelect>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <TextInput
+                      id="role-selectors"
+                      aria-label="ClusterRole selector label"
+                      placeholder="nova-ai.io/aggregate-to-admin"
+                      value={selectorKey}
+                      onChange={(_event, value) => setSelectorKey(value)}
+                    />
+                    <TextInput
+                      aria-label="ClusterRole selector value"
+                      placeholder="true"
+                      value={selectorValue}
+                      onChange={(_event, value) => setSelectorValue(value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          addSelector();
+                        }
+                      }}
+                    />
+                    <Button variant="secondary" type="button" onClick={addSelector}>
+                      Add
+                    </Button>
+                  </div>
                   <FormHelperText>
                     <HelperText>
                       <HelperTextItem>
-                        {accessLevel === 'oidc'
-                          ? 'One role per instance, named nova-ai-mlflow.team-a, nova-ai-airflow.team-a, or nova-ai-jupyterhub.team-a. It logs into nova-ai-<component>-<namespace>.'
-                          : 'Admin can create projects and manage roles. Developer opens the bound projects.'}
+                        Each entry is one clusterRoleSelector matchLabels pair. Nothing is added until you press Add.
                       </HelperTextItem>
                     </HelperText>
                   </FormHelperText>
-                </FormGroup>
-              )}
+                </div>
+              </FormGroup>
               <FormGroup label="OIDC applications" fieldId="role-applications">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
                     {applications.map((application) => (
                       <Label
                         key={application}
-                        color={application === CONSOLE_OIDC_APPLICATION ? 'blue' : 'grey'}
-                        onClose={
-                          application === CONSOLE_OIDC_APPLICATION
-                            ? undefined
-                            : () => setApplications((current) => current.filter((item) => item !== application))
-                        }
+                        color="grey"
+                        onClose={() => setApplications((current) => current.filter((item) => item !== application))}
                       >
                         {application}
                       </Label>
