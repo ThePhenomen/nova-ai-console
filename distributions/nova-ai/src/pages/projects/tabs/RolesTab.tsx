@@ -13,14 +13,20 @@ import {
   HelperText,
   HelperTextItem,
   Label,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
   PageSection,
+  Popover,
   Spinner,
   TextInput,
   Toolbar,
   ToolbarContent,
   ToolbarItem,
 } from '@patternfly/react-core';
-import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
+import { OutlinedQuestionCircleIcon } from '@patternfly/react-icons';
+import { ActionsColumn, Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import {
   bindingAppliesToProject,
   componentOidcApplication,
@@ -28,6 +34,7 @@ import {
   CONSOLE_PERSONA_LABEL,
   KUBERNETES_ACCESS_PRESETS,
   OIDC_APPLICATION_NAME,
+  kubernetesAccessFromRole,
   oidcApplicationsWithConsole,
   type KubernetesAccessLevel,
 } from '../../../auth/access';
@@ -66,6 +73,11 @@ const clusterRolesForRole = (role: PlatformRoleKind): string[] => {
   return role.status?.aggregatedClusterRole ? [role.status.aggregatedClusterRole] : [];
 };
 
+const applicationsForAccess = (accessLevel: RoleCreateAccess, roleName: string): string[] =>
+  accessLevel === 'oidc' && roleName
+    ? [componentOidcApplication(roleName)]
+    : [CONSOLE_OIDC_APPLICATION];
+
 const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const [roles, setRoles] = React.useState<PlatformRoleKind[]>([]);
   const [boundRoleNames, setBoundRoleNames] = React.useState<Set<string>>(new Set());
@@ -73,12 +85,12 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const [formError, setFormError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [editingRole, setEditingRole] = React.useState<PlatformRoleKind | null>(null);
   const [name, setName] = React.useState('');
   const [accessLevel, setAccessLevel] = React.useState<RoleCreateAccess>('developer');
-  const [isFormOpen, setIsFormOpen] = React.useState(false);
-  const [applicationDrafts, setApplicationDrafts] = React.useState<Record<string, string>>({});
-  const [savingRole, setSavingRole] = React.useState<string | null>(null);
-  const [applicationError, setApplicationError] = React.useState<string | null>(null);
+  const [applications, setApplications] = React.useState<string[]>([]);
+  const [applicationDraft, setApplicationDraft] = React.useState('');
 
   const load = React.useCallback(async () => {
     setIsLoading(true);
@@ -113,14 +125,51 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
     void load();
   }, [load]);
 
-  const resetForm = () => {
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingRole(null);
     setName('');
     setAccessLevel('developer');
-    setIsFormOpen(false);
+    setApplications([]);
+    setApplicationDraft('');
     setFormError(null);
   };
 
-  const create = async (event: React.FormEvent) => {
+  const openCreate = () => {
+    setEditingRole(null);
+    setName('');
+    setAccessLevel('developer');
+    setApplications(applicationsForAccess('developer', ''));
+    setApplicationDraft('');
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (role: PlatformRoleKind) => {
+    const level = kubernetesAccessFromRole(role);
+    setEditingRole(role);
+    setName(role.metadata.name);
+    setAccessLevel(level === 'none' ? 'oidc' : level);
+    setApplications([...(role.spec?.oidc?.applications ?? [])]);
+    setApplicationDraft('');
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  const addDraftApplication = () => {
+    const next = applicationDraft.trim();
+    if (!OIDC_APPLICATION_NAME.test(next)) {
+      setFormError(
+        'OIDC application name must start with a letter or digit and contain only letters, digits, ".", "_" and "-".',
+      );
+      return;
+    }
+    setFormError(null);
+    setApplications((current) => (current.includes(next) ? current : [...current, next]));
+    setApplicationDraft('');
+  };
+
+  const save = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormError(null);
     const trimmed = name.trim().toLowerCase();
@@ -129,8 +178,9 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
       return;
     }
     const isOidcClient = accessLevel === 'oidc';
-    const roleName = isOidcClient ? trimmed : dns1123Name(trimmed);
+    const roleName = editingRole?.metadata.name ?? (isOidcClient ? trimmed : dns1123Name(trimmed));
     if (
+      !editingRole &&
       isOidcClient &&
       !/^nova-ai-(mlflow|airflow|jupyterhub)\.[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(roleName)
     ) {
@@ -139,87 +189,56 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
       );
       return;
     }
-    const preset = isOidcClient ? undefined : KUBERNETES_ACCESS_PRESETS[accessLevel];
-    const labels: Record<string, string> = { ...consoleScopeLabels() };
-    if (preset?.persona) {
-      labels[CONSOLE_PERSONA_LABEL] = preset.persona;
-    }
-    const clusterRoleSelectors = isOidcClient
-      ? []
-      : (preset?.selectors ?? []).map((key) => ({
-          matchLabels: { [key]: 'true' },
-        }));
-    const applications = isOidcClient
-      ? [componentOidcApplication(roleName)]
-      : [CONSOLE_OIDC_APPLICATION];
+    const keepsConsole = (editingRole?.spec?.oidc?.applications ?? applications).includes(
+      CONSOLE_OIDC_APPLICATION,
+    );
+    const nextApplications = keepsConsole
+      ? oidcApplicationsWithConsole(applications)
+      : [...new Set(applications.map((value) => value.trim()).filter((value) => value !== ''))];
     setIsSaving(true);
     try {
-      await createPlatformRole({
-        apiVersion: 'auth.nova-platform.io/v1alpha1',
-        kind: 'PlatformRole',
-        metadata: { name: roleName, labels },
-        spec: {
-          ...(clusterRoleSelectors.length > 0 ? { kubernetes: { clusterRoleSelectors } } : {}),
-          oidc: {
-            applications,
+      if (editingRole) {
+        await updatePlatformRole({
+          ...editingRole,
+          spec: {
+            ...editingRole.spec,
+            oidc: { applications: nextApplications },
           },
-        },
-      });
-      resetForm();
+        });
+      } else {
+        const preset = isOidcClient ? undefined : KUBERNETES_ACCESS_PRESETS[accessLevel];
+        const labels: Record<string, string> = { ...consoleScopeLabels() };
+        if (preset?.persona) {
+          labels[CONSOLE_PERSONA_LABEL] = preset.persona;
+        }
+        const clusterRoleSelectors = isOidcClient
+          ? []
+          : (preset?.selectors ?? []).map((key) => ({
+              matchLabels: { [key]: 'true' },
+            }));
+        await createPlatformRole({
+          apiVersion: 'auth.nova-platform.io/v1alpha1',
+          kind: 'PlatformRole',
+          metadata: { name: roleName, labels },
+          spec: {
+            ...(clusterRoleSelectors.length > 0 ? { kubernetes: { clusterRoleSelectors } } : {}),
+            oidc: { applications: nextApplications },
+          },
+        });
+      }
+      closeModal();
       await load();
     } catch (err) {
       setFormError(
         err instanceof K8sApiError || err instanceof Error
           ? err.message
-          : 'Failed to create PlatformRole.',
+          : editingRole
+            ? 'Failed to update PlatformRole.'
+            : 'Failed to create PlatformRole.',
       );
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const saveApplications = async (role: PlatformRoleKind, applications: string[]) => {
-    const keepsConsole = (role.spec?.oidc?.applications ?? []).includes(CONSOLE_OIDC_APPLICATION);
-    const next = keepsConsole
-      ? oidcApplicationsWithConsole(applications)
-      : [...new Set(applications.map((value) => value.trim()).filter((value) => value !== ''))];
-    setApplicationError(null);
-    setSavingRole(role.metadata.name);
-    try {
-      await updatePlatformRole({
-        ...role,
-        spec: {
-          ...role.spec,
-          oidc: { applications: next },
-        },
-      });
-      setApplicationDrafts((current) => ({ ...current, [role.metadata.name]: '' }));
-      await load();
-    } catch (err) {
-      setApplicationError(
-        err instanceof K8sApiError || err instanceof Error
-          ? err.message
-          : 'Failed to update OIDC applications.',
-      );
-    } finally {
-      setSavingRole(null);
-    }
-  };
-
-  const addApplication = (role: PlatformRoleKind) => {
-    const next = (applicationDrafts[role.metadata.name] ?? '').trim();
-    if (!OIDC_APPLICATION_NAME.test(next)) {
-      setApplicationError(
-        'OIDC application name must start with a letter or digit and contain only letters, digits, ".", "_" and "-".',
-      );
-      return;
-    }
-    const current = role.spec?.oidc?.applications ?? [];
-    if (current.includes(next)) {
-      setApplicationDrafts((drafts) => ({ ...drafts, [role.metadata.name]: '' }));
-      return;
-    }
-    void saveApplications(role, [...current, next]);
   };
 
   if (isLoading) {
@@ -244,74 +263,15 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
 
   return (
     <PageSection>
-      {formError ? (
-        <Alert variant="danger" isInline title="Could not create role" style={{ marginBottom: '1rem' }}>
-          {formError}
-        </Alert>
-      ) : null}
       <Toolbar>
         <ToolbarContent>
           <ToolbarItem>
-            <Button
-              variant="primary"
-              onClick={() => {
-                setFormError(null);
-                setIsFormOpen(true);
-              }}
-              isDisabled={isFormOpen}
-            >
+            <Button variant="primary" onClick={openCreate}>
               Create platform role
             </Button>
           </ToolbarItem>
         </ToolbarContent>
       </Toolbar>
-      {isFormOpen ? (
-        <Form onSubmit={create} style={{ marginBottom: '1.5rem', maxWidth: '40rem' }}>
-          <FormGroup label="Name" isRequired fieldId="create-role-name">
-            <TextInput
-              id="create-role-name"
-              value={name}
-              onChange={(_event, value) => setName(value)}
-              placeholder={accessLevel === 'oidc' ? 'nova-ai-jupyterhub.team-a' : 'nova-ai-experiments'}
-              isRequired
-            />
-          </FormGroup>
-          <FormGroup label="Kubernetes access" isRequired fieldId="create-role-access">
-            <FormSelect
-              id="create-role-access"
-              value={accessLevel}
-              onChange={(_event, value) => setAccessLevel(value as RoleCreateAccess)}
-              aria-label="Kubernetes access"
-            >
-              {ACCESS_OPTIONS.map((option) => (
-                <FormSelectOption key={option.id} value={option.id} label={option.title} />
-              ))}
-            </FormSelect>
-            <FormHelperText>
-              <HelperText>
-                <HelperTextItem>
-                  {accessLevel === 'oidc'
-                    ? 'One role per instance, named nova-ai-mlflow.team-a, nova-ai-airflow.team-a, or nova-ai-jupyterhub.team-a. It logs into nova-ai-<component>-<namespace>. Bind admins, developers, and viewers to it. JupyterHub has no viewers group.'
-                    : 'Admin can create projects and manage roles. Developer opens the bound projects. Component tabs follow OIDC groups, and KServe follows its own roles.'}
-                </HelperTextItem>
-              </HelperText>
-            </FormHelperText>
-          </FormGroup>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <Button type="submit" variant="primary" isLoading={isSaving} isDisabled={isSaving}>
-              Create
-            </Button>
-            <Button type="button" variant="link" onClick={resetForm} isDisabled={isSaving}>
-              Cancel
-            </Button>
-          </div>
-        </Form>
-      ) : null}
-      {applicationError ? (
-        <Alert variant="danger" isInline title="Could not update OIDC applications">
-          {applicationError}
-        </Alert>
-      ) : null}
       <HelperText>
         <HelperTextItem>
           Console login stays on nova-ai-admin and nova-ai-developer. An instance role such as
@@ -334,7 +294,20 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
               <Th>ClusterRole</Th>
               <Th>OIDC applications</Th>
               <Th>Phase</Th>
-              <Th>Bound here</Th>
+              <Th>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                  Bound here
+                  <Popover
+                    aria-label="About Bound here"
+                    bodyContent="Yes means a PlatformRoleBinding for this role applies to this project. No means the role exists, but it is not granted here. Grant it on the Permissions tab."
+                  >
+                    <Button variant="plain" aria-label="About Bound here" style={{ padding: 0 }}>
+                      <OutlinedQuestionCircleIcon />
+                    </Button>
+                  </Popover>
+                </span>
+              </Th>
+              <Th screenReaderText="Actions" />
             </Tr>
           </Thead>
           <Tbody>
@@ -346,61 +319,34 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
                     {clusterRolesForRole(role).join(', ') || '—'}
                   </Td>
                   <Td dataLabel="OIDC applications">
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                        {(role.spec?.oidc?.applications ?? []).map((application) => (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                      {(role.spec?.oidc?.applications ?? []).length > 0
+                        ? (role.spec?.oidc?.applications ?? []).map((application) => (
                             <Label
                               key={application}
                               color={application === CONSOLE_OIDC_APPLICATION ? 'blue' : 'grey'}
-                              onClose={
-                                application === CONSOLE_OIDC_APPLICATION
-                                  ? undefined
-                                  : () => {
-                                      void saveApplications(
-                                        role,
-                                        (role.spec?.oidc?.applications ?? []).filter(
-                                          (item) => item !== application,
-                                        ),
-                                      );
-                                    }
-                              }
                             >
                               {application}
                             </Label>
-                        ))}
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <TextInput
-                          aria-label={`OIDC application for ${role.metadata.name}`}
-                          placeholder="nova-ai-mlflow-team-a"
-                          value={applicationDrafts[role.metadata.name] ?? ''}
-                          onChange={(_event, value) =>
-                            setApplicationDrafts((drafts) => ({
-                              ...drafts,
-                              [role.metadata.name]: value,
-                            }))
-                          }
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                              event.preventDefault();
-                              addApplication(role);
-                            }
-                          }}
-                        />
-                        <Button
-                          variant="secondary"
-                          isDisabled={savingRole === role.metadata.name}
-                          isLoading={savingRole === role.metadata.name}
-                          onClick={() => addApplication(role)}
-                        >
-                          Add
-                        </Button>
-                      </div>
+                          ))
+                        : '—'}
                     </div>
                   </Td>
                   <Td dataLabel="Phase">{role.status?.phase ?? '—'}</Td>
-                  <Td dataLabel="Bound here">
-                    {boundRoleNames.has(role.metadata.name) ? 'Yes' : 'No'}
+                  <Td dataLabel="Bound here">{boundRoleNames.has(role.metadata.name) ? 'Yes' : 'No'}</Td>
+                  <Td isActionCell>
+                    <ActionsColumn
+                      items={[
+                        {
+                          title: 'Edit',
+                          onClick: (event) => {
+                            event?.preventDefault();
+                            event?.stopPropagation();
+                            openEdit(role);
+                          },
+                        },
+                      ]}
+                    />
                   </Td>
                 </Tr>
               );
@@ -408,6 +354,107 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
           </Tbody>
         </Table>
       )}
+      {isModalOpen ? (
+        <Modal
+          isOpen
+          variant="medium"
+          onClose={closeModal}
+          aria-label={editingRole ? 'Edit platform role' : 'Create platform role'}
+        >
+          <ModalHeader title={editingRole ? 'Edit platform role' : 'Create platform role'} />
+          <ModalBody>
+            <Form id="platform-role-form" onSubmit={save}>
+              {formError ? (
+                <Alert variant="danger" isInline title={editingRole ? 'Could not update role' : 'Could not create role'}>
+                  {formError}
+                </Alert>
+              ) : null}
+              <FormGroup label="Name" isRequired fieldId="role-name">
+                <TextInput
+                  id="role-name"
+                  value={name}
+                  onChange={(_event, value) => setName(value)}
+                  placeholder={accessLevel === 'oidc' ? 'nova-ai-jupyterhub.team-a' : 'nova-ai-experiments'}
+                  isRequired
+                  isDisabled={editingRole !== null || isSaving}
+                />
+              </FormGroup>
+              {editingRole ? null : (
+                <FormGroup label="Kubernetes access" isRequired fieldId="role-access">
+                  <FormSelect
+                    id="role-access"
+                    value={accessLevel}
+                    onChange={(_event, value) => {
+                      const next = value as RoleCreateAccess;
+                      setAccessLevel(next);
+                      setApplications(applicationsForAccess(next, name.trim().toLowerCase()));
+                    }}
+                    aria-label="Kubernetes access"
+                  >
+                    {ACCESS_OPTIONS.map((option) => (
+                      <FormSelectOption key={option.id} value={option.id} label={option.title} />
+                    ))}
+                  </FormSelect>
+                  <FormHelperText>
+                    <HelperText>
+                      <HelperTextItem>
+                        {accessLevel === 'oidc'
+                          ? 'One role per instance, named nova-ai-mlflow.team-a, nova-ai-airflow.team-a, or nova-ai-jupyterhub.team-a. It logs into nova-ai-<component>-<namespace>.'
+                          : 'Admin can create projects and manage roles. Developer opens the bound projects.'}
+                      </HelperTextItem>
+                    </HelperText>
+                  </FormHelperText>
+                </FormGroup>
+              )}
+              <FormGroup label="OIDC applications" fieldId="role-applications">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                    {applications.map((application) => (
+                      <Label
+                        key={application}
+                        color={application === CONSOLE_OIDC_APPLICATION ? 'blue' : 'grey'}
+                        onClose={
+                          application === CONSOLE_OIDC_APPLICATION
+                            ? undefined
+                            : () => setApplications((current) => current.filter((item) => item !== application))
+                        }
+                      >
+                        {application}
+                      </Label>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <TextInput
+                      id="role-applications"
+                      aria-label="OIDC application"
+                      placeholder="nova-ai-mlflow-team-a"
+                      value={applicationDraft}
+                      onChange={(_event, value) => setApplicationDraft(value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          addDraftApplication();
+                        }
+                      }}
+                    />
+                    <Button variant="secondary" type="button" onClick={addDraftApplication}>
+                      Add
+                    </Button>
+                  </div>
+                </div>
+              </FormGroup>
+            </Form>
+          </ModalBody>
+          <ModalFooter>
+            <Button type="submit" form="platform-role-form" variant="primary" isLoading={isSaving} isDisabled={isSaving}>
+              {editingRole ? 'Save' : 'Create'}
+            </Button>
+            <Button variant="link" onClick={closeModal} isDisabled={isSaving}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </Modal>
+      ) : null}
     </PageSection>
   );
 };
