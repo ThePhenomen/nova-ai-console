@@ -1,6 +1,15 @@
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: Group
 metadata:
+  name: nova-ai.admins
+spec:
+  type: internal
+  members:
+  - ml-admin
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: Group
+metadata:
   name: nova-ai-console.admins
 spec:
   type: internal

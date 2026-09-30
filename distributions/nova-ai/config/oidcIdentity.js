@@ -160,15 +160,25 @@ const identityFromToken = async (token) => {
   }
 
   const usernameClaim = process.env.K8S_OIDC_USERNAME_CLAIM || 'sub';
+  const subject = headerValue(typeof payload.sub === 'string' ? payload.sub : '');
   const claimValue = headerValue(
-    (typeof payload[usernameClaim] === 'string' && payload[usernameClaim]) ||
-      (typeof payload.sub === 'string' ? payload.sub : ''),
+    (typeof payload[usernameClaim] === 'string' && payload[usernameClaim]) || subject,
   );
   if (!claimValue) {
     throw new Error('OIDC token has no subject.');
   }
+  const aliases = [
+    subject,
+    claimValue,
+    headerValue(typeof payload.preferred_username === 'string' ? payload.preferred_username : ''),
+    headerValue(typeof payload.email === 'string' ? payload.email : ''),
+  ].filter((value) => value !== '');
   const groups = ['system:authenticated', ...claimGroups(payload)];
-  return { username: kubernetesUsername(claimValue), groups: [...new Set(groups)] };
+  return {
+    username: kubernetesUsername(claimValue),
+    groups: [...new Set(groups)],
+    aliases: [...new Set(aliases)],
+  };
 };
 
 module.exports = { identityFromToken };

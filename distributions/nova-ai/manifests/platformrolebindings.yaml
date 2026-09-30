@@ -1,9 +1,97 @@
-# Bindings for project ml-team. Each group is paired with the roles it can hold.
-# Console admin is cluster-wide. Console developer is limited to ml-team.
-# KServe namespace edit/view stays in ml-team. Cluster edit and cluster view
-# use target Cluster and do not grant InferenceService in other projects.
-# MLflow, Airflow and JupyterHub groups share one OIDC role per component.
+# nova-ai.admins is a convenience group: console admin, KServe edit in every
+# project, cluster KServe edit, and the ml-team component OIDC clients.
+# The bindings below it pair each ml-team group with its own role.
 # JupyterHub has no viewers group.
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-admins-console
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-admin
+  subjects:
+    - kind: Group
+      name: nova-ai.admins
+  kubernetes:
+    target: Cluster
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-admins-kserve-cluster-edit
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-kserve.cluster-edit
+  subjects:
+    - kind: Group
+      name: nova-ai.admins
+  kubernetes:
+    target: Cluster
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-admins-kserve-edit
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-kserve.ml-team.edit
+  subjects:
+    - kind: Group
+      name: nova-ai.admins
+  kubernetes:
+    target: Cluster
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-admins-mlflow
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-mlflow.ml-team
+  subjects:
+    - kind: Group
+      name: nova-ai.admins
+  kubernetes:
+    target: None
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-admins-airflow
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-airflow.ml-team
+  subjects:
+    - kind: Group
+      name: nova-ai.admins
+  kubernetes:
+    target: None
+---
+apiVersion: auth.nova-platform.io/v1alpha1
+kind: PlatformRoleBinding
+metadata:
+  name: nova-ai-admins-jupyterhub
+  labels:
+    nova-ai.io/console: nova-ai-console
+spec:
+  platformRoleRef:
+    name: nova-ai-jupyterhub.ml-team
+  subjects:
+    - kind: Group
+      name: nova-ai.admins
+  kubernetes:
+    target: None
 ---
 apiVersion: auth.nova-platform.io/v1alpha1
 kind: PlatformRoleBinding

@@ -137,6 +137,74 @@ const handleSession = (req, res) => {
     });
 };
 
+const readProxyBody = (proxyRes) =>
+  new Promise((resolve, reject) => {
+    const chunks = [];
+    proxyRes.on('data', (chunk) => chunks.push(chunk));
+    proxyRes.on('end', () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    proxyRes.on('error', reject);
+  });
+
+const kubeGet = async (session, path) => {
+  const clusterUrl = session.apiServer.endsWith('/') ? session.apiServer : `${session.apiServer}/`;
+  const target = new URL(path.replace(/^\//, ''), clusterUrl);
+  const headers = { accept: 'application/json' };
+  if (session.token) {
+    headers.authorization = `Bearer ${session.token}`;
+  }
+  const { proxyRes } = await requestK8s(target, 'GET', headers, undefined, session);
+  if ((proxyRes.statusCode || 500) >= 400) {
+    proxyRes.resume();
+    return null;
+  }
+  return readProxyBody(proxyRes);
+};
+
+/** @type {Map<string, { at: number, groups: string[] }>} */
+const membershipCache = new Map();
+
+const groupsForIdentity = async (session, aliases) => {
+  const key = aliases.slice().sort().join('\n');
+  const cached = membershipCache.get(key);
+  if (cached && Date.now() - cached.at < 15000) {
+    return cached.groups;
+  }
+  const [users, groups] = await Promise.all([
+    kubeGet(session, '/apis/auth.nova-platform.io/v1alpha1/users'),
+    kubeGet(session, '/apis/auth.nova-platform.io/v1alpha1/groups'),
+  ]);
+  const aliasSet = new Set(aliases.map((value) => value.toLowerCase()));
+  const userNames = new Set(aliases);
+  (users?.items ?? []).forEach((user) => {
+    const candidates = [
+      user.metadata?.name,
+      user.spec?.username,
+      user.status?.username,
+      user.status?.entityId,
+      user.status?.email,
+    ];
+    if (candidates.some((value) => typeof value === 'string' && aliasSet.has(value.toLowerCase()))) {
+      if (user.metadata?.name) {
+        userNames.add(user.metadata.name);
+      }
+    }
+  });
+  const matched = (groups?.items ?? [])
+    .filter((group) =>
+      (group.spec?.members ?? []).some((member) => userNames.has(member) || aliasSet.has(String(member).toLowerCase())),
+    )
+    .map((group) => group.metadata?.name)
+    .filter((name) => typeof name === 'string' && name !== '');
+  membershipCache.set(key, { at: Date.now(), groups: matched });
+  return matched;
+};
+
 const readRawBody = (req) =>
   new Promise((resolve, reject) => {
     const chunks = [];
@@ -357,9 +425,11 @@ const k8sProxyMiddleware = (req, res, next) => {
   }
 
   identityFromToken(userToken.trim())
-    .then((identity) => {
+    .then(async (identity) => {
+      const membership = await groupsForIdentity(session, identity.aliases ?? []).catch(() => []);
+      const groups = [...new Set([...identity.groups, ...membership])];
       headers['Impersonate-User'] = identity.username;
-      headers['Impersonate-Group'] = identity.groups;
+      headers['Impersonate-Group'] = groups;
       return requestK8s(target, method, headers, hasBody ? req : undefined, session);
     })
     .then(({ proxyRes }) => {

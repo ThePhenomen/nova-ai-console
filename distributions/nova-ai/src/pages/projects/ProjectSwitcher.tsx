@@ -2,6 +2,7 @@ import React from 'react';
 import { FormSelect, FormSelectOption, Spinner } from '@patternfly/react-core';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { canShowKserveSettings, hasProjectService } from '../../auth/access';
+import { useConsoleResourceAccess } from '../../auth/useConsoleResourceAccess';
 import { usePlatformAccess } from '../../auth/usePlatformAccess';
 import { useClusterConnection } from '../../cluster/useClusterConnection';
 import { listProjects } from './projectApi';
@@ -23,6 +24,7 @@ const ProjectSwitcher: React.FC = () => {
   const location = useLocation();
   const connection = useClusterConnection();
   const { access, isLoading: isAccessLoading } = usePlatformAccess();
+  const resourceAccess = useConsoleResourceAccess();
   const selected = useSelectedProject();
   const [names, setNames] = React.useState<string[]>([]);
   const [hasLoaded, setHasLoaded] = React.useState(false);
@@ -41,7 +43,7 @@ const ProjectSwitcher: React.FC = () => {
         setNames(
           projects
             .map((project) => project.name)
-            .filter((name) => access.canViewProject(name))
+            .filter((name) => resourceAccess.listNamespaces || access.canViewProject(name))
             .toSorted((left, right) => left.localeCompare(right)),
         );
       })
@@ -58,7 +60,7 @@ const ProjectSwitcher: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [access, connection, isAccessLoading]);
+  }, [access, connection, isAccessLoading, resourceAccess.listNamespaces]);
 
   React.useEffect(() => {
     if (!hasLoaded) {

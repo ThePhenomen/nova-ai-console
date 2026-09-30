@@ -176,10 +176,10 @@ const KServeSettings: React.FC = () => {
         setItems(listed);
         return;
       }
-      const scoped =
-        access.consoleRole === 'admin'
-          ? (await listProjects()).map((project) => project.name)
-          : access.visibleProjects.filter((name) => access.canViewProject(name));
+      const canListNamespaces = await canI('list', '', 'namespaces');
+      const scoped = canListNamespaces
+        ? (await listProjects()).map((project) => project.name)
+        : access.visibleProjects.filter((name) => access.canViewProject(name));
       setNamespaces(scoped);
       const lists = await Promise.all(
         scoped.map(async (namespace) => {

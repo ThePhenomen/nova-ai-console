@@ -11,6 +11,7 @@ import {
 } from '@patternfly/react-core';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { hasProjectService } from '../../auth/access';
+import { useConsoleResourceAccess } from '../../auth/useConsoleResourceAccess';
 import { usePlatformAccess } from '../../auth/usePlatformAccess';
 import { PIPELINES_SERVICE } from '../../consoleServices';
 import DeploymentsTab from './tabs/DeploymentsTab';
@@ -38,6 +39,7 @@ const ProjectDetails: React.FC = () => {
   const { projectName, tab } = useParams<{ projectName: string; tab: string }>();
   const navigate = useNavigate();
   const { access } = usePlatformAccess();
+  const resourceAccess = useConsoleResourceAccess();
 
   if (!projectName) {
     return (
@@ -47,7 +49,7 @@ const ProjectDetails: React.FC = () => {
     );
   }
 
-  if (!access.canViewProject(projectName)) {
+  if (!resourceAccess.listNamespaces && !access.canViewProject(projectName)) {
     return (
       <PageSection>
         <Alert variant="danger" isInline title="Access denied">
@@ -60,7 +62,7 @@ const ProjectDetails: React.FC = () => {
   const projectAccess = access.forProject(projectName);
   const visibleTabs = PROJECT_TABS.filter((item) => {
     if ('adminOnly' in item && item.adminOnly) {
-      return projectAccess.canManageRbac;
+      return resourceAccess.manageRoles;
     }
     if ('service' in item && item.service) {
       return hasProjectService(projectAccess, item.service);
@@ -104,7 +106,7 @@ const ProjectDetails: React.FC = () => {
         </Tabs>
       </PageSection>
       {activeTab === 'overview' ? (
-        <OverviewTab projectName={projectName} canManageRbac={projectAccess.canManageRbac} />
+        <OverviewTab projectName={projectName} canManageRbac={resourceAccess.manageRoles} />
       ) : null}
       {activeTab === 'workbench' ? (
         <PlaceholderTab title="Workbench" description="Workbenches in this project will appear here." />

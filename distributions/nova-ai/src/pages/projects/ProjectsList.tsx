@@ -34,6 +34,7 @@ import {
 import { K8sApiError } from '../../cluster/k8sClient';
 import { useClusterConnection } from '../../cluster/useClusterConnection';
 import { useAuthSession } from '../../auth/useAuthSession';
+import { useConsoleResourceAccess } from '../../auth/useConsoleResourceAccess';
 import { usePlatformAccess } from '../../auth/usePlatformAccess';
 import CreateProjectModal from './CreateProjectModal';
 import { deleteProject, listProjects, type ProjectSummary } from './projectApi';
@@ -103,6 +104,7 @@ const ProjectsList: React.FC = () => {
   const connection = useClusterConnection();
   const [session] = useAuthSession();
   const { access, error: accessError, isLoading: isAccessLoading } = usePlatformAccess();
+  const resourceAccess = useConsoleResourceAccess();
   const [projects, setProjects] = React.useState<ProjectSummary[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
@@ -139,12 +141,15 @@ const ProjectsList: React.FC = () => {
     void loadProjects();
   }, [loadProjects]);
 
-  const showCreate = access.canCreateProjects;
+  const showCreate = resourceAccess.createNamespaces;
+  const showEdit = resourceAccess.updateNamespaces;
+  const showDelete = resourceAccess.deleteNamespaces;
+  const showPermissions = resourceAccess.manageRoles;
 
   const filteredProjects = React.useMemo(() => {
     const query = search.trim().toLowerCase();
     return projects
-      .filter((project) => access.canViewProject(project.name))
+      .filter((project) => resourceAccess.listNamespaces || access.canViewProject(project.name))
       .filter((project) => {
         if (!query) {
           return true;
@@ -156,7 +161,7 @@ const ProjectsList: React.FC = () => {
         );
       })
       .toSorted((left, right) => compareProjects(left, right, sortColumn, sortDirection));
-  }, [access, projects, search, sortColumn, sortDirection]);
+  }, [access, projects, resourceAccess.listNamespaces, search, sortColumn, sortDirection]);
 
   const pageCount = Math.max(1, Math.ceil(filteredProjects.length / perPage));
   const currentPage = Math.min(page, pageCount);
@@ -347,12 +352,12 @@ const ProjectsList: React.FC = () => {
                     onMouseDown={(event) => event.stopPropagation()}
                     onKeyDown={(event) => event.stopPropagation()}
                   >
-                    {showCreate || access.forProject(project.name).canManageRbac ? (
+                    {showCreate || showEdit || showDelete || showPermissions ? (
                       <ActionsColumn
                         items={[
                           {
                             title: 'Edit project',
-                            isDisabled: !showCreate,
+                            isDisabled: !showEdit,
                             onClick: (event) => {
                               event?.preventDefault();
                               event?.stopPropagation();
@@ -361,7 +366,7 @@ const ProjectsList: React.FC = () => {
                           },
                           {
                             title: 'Edit permissions',
-                            isDisabled: !access.forProject(project.name).canManageRbac,
+                            isDisabled: !showPermissions,
                             onClick: (event) => {
                               event?.preventDefault();
                               event?.stopPropagation();
@@ -373,7 +378,7 @@ const ProjectsList: React.FC = () => {
                           },
                           {
                             title: 'Delete project',
-                            isDisabled: !showCreate,
+                            isDisabled: !showDelete,
                             onClick: (event) => {
                               event?.preventDefault();
                               event?.stopPropagation();
