@@ -13,6 +13,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { hasProjectService } from '../../auth/access';
 import { useConsoleResourceAccess } from '../../auth/useConsoleResourceAccess';
 import { usePlatformAccess } from '../../auth/usePlatformAccess';
+import { canI } from '../../cluster/accessReview';
 import { PIPELINES_SERVICE } from '../../consoleServices';
 import DeploymentsTab from './tabs/DeploymentsTab';
 import OverviewTab from './tabs/OverviewTab';
@@ -40,6 +41,22 @@ const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
   const { access } = usePlatformAccess();
   const resourceAccess = useConsoleResourceAccess();
+  const [canListDeployments, setCanListDeployments] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!projectName) {
+      return;
+    }
+    let cancelled = false;
+    void canI('list', 'serving.kserve.io', 'inferenceservices', projectName).then((allowed) => {
+      if (!cancelled) {
+        setCanListDeployments(allowed);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectName]);
 
   if (!projectName) {
     return (
@@ -60,14 +77,18 @@ const ProjectDetails: React.FC = () => {
   }
 
   const projectAccess = access.forProject(projectName);
+  const canViewProject = resourceAccess.listNamespaces || projectAccess.canView;
   const visibleTabs = PROJECT_TABS.filter((item) => {
     if ('adminOnly' in item && item.adminOnly) {
       return resourceAccess.manageRoles;
     }
+    if ('service' in item && item.service === 'Deployments') {
+      return canListDeployments || hasProjectService(projectAccess, item.service);
+    }
     if ('service' in item && item.service) {
       return hasProjectService(projectAccess, item.service);
     }
-    return projectAccess.canView;
+    return canViewProject;
   });
   const requestedTab: ProjectTabId = isProjectTabId(tab) ? tab : 'overview';
   const activeTab = visibleTabs.some((item) => item.id === requestedTab)

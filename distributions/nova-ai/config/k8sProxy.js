@@ -9,6 +9,7 @@ const PROXY_PREFIX = '/k8s-proxy';
 const SESSION_PATH = '/k8s-session';
 const OIDC_FORWARD_PATH = '/oidc-forward';
 const OIDC_PKCE_PATH = '/oidc-pkce';
+const MEMBERSHIP_PATH = '/k8s-membership';
 
 /** @type {Map<string, { apiServer: string, token?: string, cert?: Buffer, key?: Buffer, ca?: Buffer }>} */
 const sessions = new Map();
@@ -357,6 +358,22 @@ const handleOidcForward = (req, res) => {
  * so the proxy authenticates with the kubeconfig identity and impersonates the
  * user the apiserver would derive: username claim sub, groups claim groups.
  */
+const handleMembership = (req, res) => {
+  if (req.method !== 'GET') {
+    sendJson(res, 405, { message: 'Method not allowed' });
+    return;
+  }
+  const userToken = req.headers['x-nova-id-token'];
+  if (typeof userToken !== 'string' || userToken.trim() === '' || !envClusterSession) {
+    sendJson(res, 200, { groups: [] });
+    return;
+  }
+  identityFromToken(userToken.trim())
+    .then((identity) => groupsForIdentity(envClusterSession, identity.aliases ?? []))
+    .then((groups) => sendJson(res, 200, { groups }))
+    .catch(() => sendJson(res, 200, { groups: [] }));
+};
+
 const k8sProxyMiddleware = (req, res, next) => {
   const url = req.url || '';
   const pathWithQuery = url.split('?')[0];
@@ -368,6 +385,11 @@ const k8sProxyMiddleware = (req, res, next) => {
 
   if (pathWithQuery === OIDC_PKCE_PATH) {
     handleOidcPkce(req, res);
+    return;
+  }
+
+  if (pathWithQuery === MEMBERSHIP_PATH) {
+    handleMembership(req, res);
     return;
   }
 

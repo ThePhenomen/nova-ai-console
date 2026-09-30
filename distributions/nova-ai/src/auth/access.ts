@@ -332,6 +332,13 @@ const isGroupGatedService = (service: string): boolean =>
 const COMPONENT_GROUP =
   /^nova-ai-(mlflow|airflow|jupyterhub)\.(.+)\.(admins|developers|viewers)$/i;
 
+const PLATFORM_ADMIN_GROUP = 'nova-ai.admins';
+const PLATFORM_ADMIN_NAMESPACE = 'ml-team';
+const PLATFORM_ADMIN_SERVICES = ['experiments', 'pipelines', 'workbench', 'deployments'];
+
+const userInGroup = (groups: string[], name: string): boolean =>
+  groups.some((group) => identityTail(group).trim().toLowerCase() === name);
+
 const COMPONENT_SERVICE: Record<string, string> = {
   mlflow: 'experiments',
   airflow: 'pipelines',
@@ -617,6 +624,16 @@ export const computePlatformAccess = (input: AccessInput): PlatformAccess => {
   let canViewKserveCluster = false;
   let canEditKserveCluster = false;
   const componentServices = componentServicesByNamespace(input.user.groups);
+  if (userInGroup(input.user.groups, PLATFORM_ADMIN_GROUP)) {
+    componentServices.set(
+      PLATFORM_ADMIN_NAMESPACE,
+      unique([
+        ...(componentServices.get(PLATFORM_ADMIN_NAMESPACE) ?? []),
+        ...PLATFORM_ADMIN_SERVICES,
+      ]),
+    );
+    deploymentWriters.add(PLATFORM_ADMIN_NAMESPACE);
+  }
 
   for (const binding of input.bindings) {
     if (!bindingMatchesUser(binding, input.user)) {

@@ -32,6 +32,29 @@ export type PlatformAccessState = {
 let inflight: Promise<void> | null = null;
 let inflightKey: string | null = null;
 
+const loadMembershipGroups = async (idToken?: string): Promise<string[]> => {
+  if (!idToken) {
+    return [];
+  }
+  try {
+    const response = await fetch('/k8s-membership', {
+      headers: { Accept: 'application/json', 'X-Nova-Id-Token': idToken },
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      return [];
+    }
+    const payload: unknown = await response.json();
+    const groups =
+      typeof payload === 'object' && payload !== null && Array.isArray((payload as { groups?: unknown }).groups)
+        ? (payload as { groups: unknown[] }).groups
+        : [];
+    return groups.filter((group): group is string => typeof group === 'string' && group.trim() !== '');
+  } catch {
+    return [];
+  }
+};
+
 const loadPlatformAccess = async (session: AuthSession, cacheKey: string): Promise<void> => {
   const current = getPlatformAccessSnapshot();
   if (current.loaded && current.cacheKey === cacheKey && !current.isLoading) {
@@ -61,7 +84,15 @@ const loadPlatformAccess = async (session: AuthSession, cacheKey: string): Promi
       if (latest.cacheKey !== cacheKey) {
         return;
       }
-      const user = enrichUserFromPlatformDirectory(session.user, platformUsers, platformGroups);
+      const membershipGroups = await loadMembershipGroups(session.idToken || session.accessToken);
+      const user = enrichUserFromPlatformDirectory(
+        {
+          ...session.user,
+          groups: [...new Set([...session.user.groups, ...membershipGroups])],
+        },
+        platformUsers,
+        platformGroups,
+      );
       setPlatformAccessSnapshot({
         access: computePlatformAccess({ user, roles, bindings, clusterRoles }),
         error: null,

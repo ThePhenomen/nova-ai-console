@@ -44,6 +44,13 @@ rules:
       - platformroles/status
       - platformrolebindings/status
     verbs: ["*"]
+  # The console reads groups, users and ClusterRoles to match the signed-in user.
+  - apiGroups: ["auth.nova-platform.io"]
+    resources: ["groups", "users"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    verbs: ["get", "list", "watch"]
 ---
 # KServe namespaced and cluster-scoped rules are separate ClusterRoles.
 # A RoleBinding cannot grant cluster-scoped resources, and a ClusterRoleBinding
