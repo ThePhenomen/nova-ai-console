@@ -75,6 +75,7 @@ export type PlatformRoleKind = {
     phase?: string;
     resolvedApplications?: string[];
     resolvedPolicies?: string[];
+    resolvedClusterRoles?: string[];
     aggregatedClusterRole?: string;
   };
 };

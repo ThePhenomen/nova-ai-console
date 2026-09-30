@@ -28,11 +28,7 @@ import {
   CONSOLE_PERSONA_LABEL,
   KUBERNETES_ACCESS_PRESETS,
   OIDC_APPLICATION_NAME,
-  canonicalConsoleService,
-  kubernetesAccessFromRole,
   oidcApplicationsWithConsole,
-  roleIsOidcClient,
-  servicesFromRole,
   type KubernetesAccessLevel,
 } from '../../../auth/access';
 import {
@@ -44,7 +40,6 @@ import {
 } from '../../../auth/platformApi';
 import type { PlatformRoleKind } from '../../../auth/types';
 import { K8sApiError } from '../../../cluster/k8sClient';
-import { CONSOLE_TAB_SERVICES } from '../../../consoleServices';
 import { consoleScopeLabels } from '../../../consoleScope';
 
 type RolesTabProps = {
@@ -63,24 +58,13 @@ const ACCESS_OPTIONS: Array<{ id: RoleCreateAccess; title: string }> = [
   { id: 'oidc', title: 'OIDC client' },
 ];
 
-const consoleAccessTitle = (role: PlatformRoleKind): string => {
-  const access = kubernetesAccessFromRole(role);
-  if (access !== 'none') {
-    return KUBERNETES_ACCESS_PRESETS[access].title;
+const clusterRolesForRole = (role: PlatformRoleKind): string[] => {
+  const resolved = role.status?.resolvedClusterRoles ?? [];
+  if (resolved.length > 0) {
+    return resolved;
   }
-  return roleIsOidcClient(role) ? 'OIDC client' : '—';
+  return role.status?.aggregatedClusterRole ? [role.status.aggregatedClusterRole] : [];
 };
-
-const formatList = (values: string[]): string => (values.length > 0 ? values.join(', ') : '—');
-
-const formatServices = (values: string[]): string =>
-  formatList(
-    values.map(
-      (value) =>
-        CONSOLE_TAB_SERVICES.find((item) => item.id === canonicalConsoleService(value))?.title ??
-        value,
-    ),
-  );
 
 const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
   const [roles, setRoles] = React.useState<PlatformRoleKind[]>([]);
@@ -347,8 +331,7 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
           <Thead>
             <Tr>
               <Th>Name</Th>
-              <Th>Console access</Th>
-              <Th>Console services</Th>
+              <Th>ClusterRole</Th>
               <Th>OIDC applications</Th>
               <Th>Phase</Th>
               <Th>Bound here</Th>
@@ -359,8 +342,9 @@ const RolesTab: React.FC<RolesTabProps> = ({ projectName }) => {
               return (
                 <Tr key={role.metadata.name}>
                   <Td dataLabel="Name">{role.metadata.name}</Td>
-                  <Td dataLabel="Console access">{consoleAccessTitle(role)}</Td>
-                  <Td dataLabel="Console services">{formatServices(servicesFromRole(role))}</Td>
+                  <Td dataLabel="ClusterRole">
+                    {clusterRolesForRole(role).join(', ') || '—'}
+                  </Td>
                   <Td dataLabel="OIDC applications">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
